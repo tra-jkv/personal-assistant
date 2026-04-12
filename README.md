@@ -28,6 +28,23 @@ Every feature is available via a full REST API — the same one the UI uses. Poi
 
 **Hierarchy:** `Goals` ↔ `Projects` → `Epics` → `Stories` → `Subtasks`
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/dashboard.png" alt="Dashboard"/><br/><sub>Dashboard</sub></td>
+    <td><img src="docs/screenshots/goals.png" alt="Goals"/><br/><sub>Goals</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/tasks.png" alt="Tasks board"/><br/><sub>Tasks board</sub></td>
+    <td><img src="docs/screenshots/epics-goal-alignment.png" alt="Epics — goal alignment view"/><br/><sub>Epics — goal alignment view</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/reports.png" alt="Reports"/><br/><sub>Reports</sub></td>
+    <td><img src="docs/screenshots/ai-assistant.png" alt="AI Assistant"/><br/><sub>AI Assistant</sub></td>
+  </tr>
+</table>
+
 ## Setup
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
