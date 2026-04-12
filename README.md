@@ -30,16 +30,19 @@ Every feature is available via a full REST API — the same one the UI uses. Poi
 
 ## Setup
 
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
 ```bash
 git clone https://github.com/your-username/engineering-hub.git
-cd personal-assistant
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # fill in your keys (see below)
-uvicorn backend.main:app --reload --port 8000
+cd engineering-hub
+make install       # installs deps and creates .env from .env.example
 ```
 
-Open `http://localhost:8000`.
+Fill in your API keys in `.env`, then:
+
+```bash
+make run           # starts the app at http://localhost:8000
+```
 
 ## Configuration (`.env`)
 
@@ -91,7 +94,7 @@ cargo tauri build     # distributable
 ## Contributing
 
 PRs welcome. Please:
-- Format and lint with `ruff format backend/ && ruff check backend/`
+- Format and lint with `make format && make check`
 - Don't commit `.env` or `data/`
 
 Report security issues via [GitHub Security Advisories](https://github.com/your-username/engineering-hub/security/advisories/new) — not public issues.
