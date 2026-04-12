@@ -1,0 +1,50 @@
+{% if project.epics %}
+  {% for epic in project.epics %}
+  <div class="p-3 mb-2" style="background:var(--surface2);border-radius:8px">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="flex items-center gap-2">
+          <a href="{{ epic.jira_url }}" target="_blank" class="kanban-jira-key" style="text-decoration:none">{{ epic.key }}</a>
+          <span class="badge badge-sm">{{ epic.status }}</span>
+        </div>
+        <div class="mt-1" style="font-weight:500">{{ epic.title }}</div>
+      </div>
+      <button class="btn btn-sm btn-ghost text-danger" 
+              hx-post="/projects/{{ project.id }}/unlink-epic/{{ epic.key }}"
+              hx-target="#linked-epics"
+              hx-swap="innerHTML"
+              hx-confirm="Unlink this epic from the project?">
+        Unlink
+      </button>
+    </div>
+    
+    {% if epic.stories %}
+    <div class="mt-3">
+      <div class="text-muted text-xs mb-2">Stories ({{ epic.stories|length }})</div>
+      <div class="flex gap-1 flex-wrap">
+        {% set done_count = epic.stories|selectattr('status', 'in', ['Done', 'Closed', 'Resolved'])|list|length %}
+        {% for story in epic.stories[:8] %}
+        <a href="{{ story.jira_url }}" target="_blank" 
+           class="badge {% if story.status in ['Done', 'Closed', 'Resolved'] %}badge-completed{% else %}badge-ghost{% endif %}"
+           style="text-decoration:none;font-size:.65rem">
+          {{ story.key }}
+        </a>
+        {% endfor %}
+        {% if epic.stories|length > 8 %}
+        <span class="badge badge-ghost" style="font-size:.65rem">+{{ epic.stories|length - 8 }} more</span>
+        {% endif %}
+      </div>
+      <div class="mt-2">
+        <div class="progress-bar" style="height:4px">
+          {% set progress = (done_count / epic.stories|length * 100)|round if epic.stories|length > 0 else 0 %}
+          <div class="progress-fill bg-success" style="width:{{ progress }}%"></div>
+        </div>
+        <div class="text-muted text-xs mt-1">{{ done_count }}/{{ epic.stories|length }} completed</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+<p class="text-muted text-sm">No Jira epics linked yet.</p>
+{% endif %}

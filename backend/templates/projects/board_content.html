@@ -1,0 +1,162 @@
+<!-- Project Kanban Board -->
+<div class="kanban-board">
+  
+  <!-- Active Projects Column -->
+  <div class="kanban-col">
+    <div class="kanban-col-header kanban-col-header-todo">
+      <span class="kanban-col-title">Active</span>
+      <span class="kanban-col-count">{{ columns.active|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for project in columns.active %}
+      <div class="kanban-card priority-border-{{ project.priority.value }}">
+        <a href="/projects/{{ project.id }}" style="text-decoration:none;color:var(--text)">
+          <div class="kanban-card-title">{{ project.name }}</div>
+        </a>
+        
+        {% if project.description %}
+        <div class="kanban-card-desc">{{ project.description[:100] }}{% if project.description|length > 100 %}...{% endif %}</div>
+        {% endif %}
+        
+        <div class="kanban-card-meta">
+          <span class="badge badge-{{ project.priority.value }}">{{ project.priority.value }}</span>
+          {% if not project.goals %}
+          <span class="badge-no-goal">No goal</span>
+          {% endif %}
+          <span class="text-muted text-sm">Updated {{ project.updated_at.strftime('%b %d') }}</span>
+        </div>
+        
+        <div class="kanban-card-actions" style="margin-top:12px">
+          <a href="/epics/?project_id={{ project.id }}" class="btn btn-primary btn-sm" style="padding:4px 8px;font-size:.75rem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-right:4px"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            Epics
+          </a>
+          <a href="/projects/{{ project.id }}" class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:.75rem">Details</a>
+        </div>
+      </div>
+      {% endfor %}
+      
+      {% if columns.active|length == 0 %}
+      <div class="text-muted text-sm" style="padding:12px">No active projects</div>
+      {% endif %}
+    </div>
+  </div>
+  
+  <!-- Paused Projects Column -->
+  <div class="kanban-col">
+    <div class="kanban-col-header kanban-col-header-blocked">
+      <span class="kanban-col-title">Paused</span>
+      <span class="kanban-col-count">{{ columns.paused|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for project in columns.paused %}
+      <div class="kanban-card priority-border-{{ project.priority.value }}">
+        <a href="/projects/{{ project.id }}" style="text-decoration:none;color:var(--text)">
+          <div class="kanban-card-title">{{ project.name }}</div>
+        </a>
+        
+        {% if project.description %}
+        <div class="kanban-card-desc">{{ project.description[:100] }}{% if project.description|length > 100 %}...{% endif %}</div>
+        {% endif %}
+        
+        <div class="kanban-card-meta">
+          <span class="badge badge-{{ project.priority.value }}">{{ project.priority.value }}</span>
+          {% if not project.goals %}
+          <span class="badge-no-goal">No goal</span>
+          {% endif %}
+          <span class="text-muted text-sm">Updated {{ project.updated_at.strftime('%b %d') }}</span>
+        </div>
+        
+        <div class="kanban-card-actions" style="margin-top:12px">
+          <a href="/epics/?project_id={{ project.id }}" class="btn btn-primary btn-sm" style="padding:4px 8px;font-size:.75rem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-right:4px"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            Epics
+          </a>
+          <a href="/projects/{{ project.id }}" class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:.75rem">Details</a>
+        </div>
+      </div>
+      {% endfor %}
+      
+      {% if columns.paused|length == 0 %}
+      <div class="text-muted text-sm" style="padding:12px">No paused projects</div>
+      {% endif %}
+    </div>
+  </div>
+  
+  <!-- Completed Projects Column -->
+  <div class="kanban-col">
+    <div class="kanban-col-header kanban-col-header-done">
+      <span class="kanban-col-title">Completed</span>
+      <span class="kanban-col-count">{{ columns.completed|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for project in columns.completed %}
+      <div class="kanban-card priority-border-{{ project.priority.value }}">
+        <a href="/projects/{{ project.id }}" style="text-decoration:none;color:var(--text)">
+          <div class="kanban-card-title">{{ project.name }}</div>
+        </a>
+        
+        {% if project.description %}
+        <div class="kanban-card-desc">{{ project.description[:100] }}{% if project.description|length > 100 %}...{% endif %}</div>
+        {% endif %}
+        
+        <div class="kanban-card-meta">
+          <span class="badge badge-{{ project.priority.value }}">{{ project.priority.value }}</span>
+          <span class="text-muted text-sm">Updated {{ project.updated_at.strftime('%b %d') }}</span>
+        </div>
+        
+        <div class="kanban-card-actions" style="margin-top:12px">
+          <a href="/epics/?project_id={{ project.id }}" class="btn btn-primary btn-sm" style="padding:4px 8px;font-size:.75rem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-right:4px"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            Epics
+          </a>
+          <a href="/projects/{{ project.id }}" class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:.75rem">Details</a>
+        </div>
+      </div>
+      {% endfor %}
+      
+      {% if columns.completed|length == 0 %}
+      <div class="text-muted text-sm" style="padding:12px">No completed projects</div>
+      {% endif %}
+    </div>
+  </div>
+  
+  <!-- Archived Projects Column -->
+  <div class="kanban-col">
+    <div class="kanban-col-header kanban-col-header-cancelled">
+      <span class="kanban-col-title">Archived</span>
+      <span class="kanban-col-count">{{ columns.archived|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for project in columns.archived %}
+      <div class="kanban-card priority-border-{{ project.priority.value }}">
+        <a href="/projects/{{ project.id }}" style="text-decoration:none;color:var(--text)">
+          <div class="kanban-card-title">{{ project.name }}</div>
+        </a>
+        
+        {% if project.description %}
+        <div class="kanban-card-desc">{{ project.description[:100] }}{% if project.description|length > 100 %}...{% endif %}</div>
+        {% endif %}
+        
+        <div class="kanban-card-meta">
+          <span class="badge badge-{{ project.priority.value }}">{{ project.priority.value }}</span>
+          <span class="text-muted text-sm">Updated {{ project.updated_at.strftime('%b %d') }}</span>
+        </div>
+        
+        <div class="kanban-card-actions" style="margin-top:12px">
+          <a href="/epics/?project_id={{ project.id }}" class="btn btn-primary btn-sm" style="padding:4px 8px;font-size:.75rem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-right:4px"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            Epics
+          </a>
+          <a href="/projects/{{ project.id }}" class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:.75rem">Details</a>
+        </div>
+      </div>
+      {% endfor %}
+      
+      {% if columns.archived|length == 0 %}
+      <div class="text-muted text-sm" style="padding:12px">No archived projects</div>
+      {% endif %}
+    </div>
+  </div>
+  
+</div>

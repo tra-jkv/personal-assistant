@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}{{ epic.key }} - {{ epic.title }}{% endblock %}
+{% block page_title %}Epic Details{% endblock %}
+{% block topbar_actions %}
+  <a href="/epics/" class="btn btn-ghost btn-sm">Back to Epics</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid" style="grid-template-columns: 2fr 1fr; gap: 24px;">
+  <!-- Main content -->
+  <div>
+    <div class="card">
+      <div class="flex items-center gap-2 mb-3">
+        <a href="{{ epic.jira_url }}" target="_blank" class="epic-key-lg">{{ epic.key }}</a>
+        <span class="badge badge-{{ epic.status|lower|replace(' ', '-') }}">{{ epic.status }}</span>
+      </div>
+      
+      <h2 style="margin:0 0 16px;font-size:1.25rem">{{ epic.title }}</h2>
+      
+      <!-- Progress Section -->
+      {% if total_tasks > 0 %}
+      <div class="progress-section">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sm font-medium">Tasks Progress</span>
+          <span class="text-lg font-bold {% if done_tasks == total_tasks %}text-success{% elif done_tasks > 0 %}text-warning{% else %}text-muted{% endif %}">
+            {{ done_tasks }}/{{ total_tasks }}
+          </span>
+        </div>
+        <div class="progress-bar" style="height:12px">
+          {% set progress = (done_tasks / total_tasks * 100)|round if total_tasks > 0 else 0 %}
+          <div class="progress-fill {% if progress == 100 %}bg-success{% elif progress >= 50 %}bg-warning{% else %}bg-primary{% endif %}" 
+               style="width:{{ progress }}%"></div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    
+    <!-- Tasks List -->
+    <div class="card mt-4">
+      <h3 style="margin:0 0 16px;font-size:1rem">Stories ({{ total_tasks }})</h3>
+      
+      {% if epic.tasks %}
+      <div class="tasks-list">
+        {% for status, tasks in tasks_by_status.items() %}
+        <div class="tasks-group">
+          <div class="tasks-group-header">
+            <span class="badge badge-sm">{{ status }}</span>
+            <span class="text-muted text-sm">{{ tasks|length }}</span>
+          </div>
+          {% for task in tasks %}
+          <a href="/tasks/{{ task.id }}" class="task-item">
+            <span class="task-key-pill">{{ task.jira_key or 'LOCAL' }}</span>
+            <span class="task-title">{{ task.title }}</span>
+            {% if task.assignee %}
+            <span class="task-assignee">{{ task.assignee }}</span>
+            {% endif %}
+          </a>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-muted">No stories linked to this epic.</p>
+      {% endif %}
+    </div>
+  </div>
+  
+  <!-- Sidebar -->
+  <div>
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:1rem">Details</h3>
+      <dl style="margin:0">
+        <dt class="text-muted text-sm">Status</dt>
+        <dd class="mb-3"><span class="badge">{{ epic.status }}</span></dd>
+        
+        <dt class="text-muted text-sm">Jira Link</dt>
+        <dd class="mb-3"><a href="{{ epic.jira_url }}" target="_blank">Open in Jira</a></dd>
+        
+        {% if epic.last_synced %}
+        <dt class="text-muted text-sm">Last Synced</dt>
+        <dd class="mb-3">{{ epic.last_synced.strftime('%b %d, %Y %H:%M') }}</dd>
+        {% endif %}
+      </dl>
+    </div>
+    
+    <!-- Linked Project (one-to-many: epic belongs to one project) -->
+    <div class="card mt-4">
+      <h3 style="margin:0 0 12px;font-size:1rem">Linked Project</h3>
+      
+      <div id="epic-projects">
+        {% if epic.project %}
+        <div class="linked-project-item">
+          <a href="/projects/{{ epic.project.id }}">{{ epic.project.name }}</a>
+          <button class="btn btn-sm btn-ghost"
+                  hx-post="/epics/{{ epic.key }}/unassign/{{ epic.project.id }}"
+                  hx-target="#epic-projects"
+                  hx-swap="innerHTML">Unlink</button>
+        </div>
+        {% else %}
+        <p class="text-muted text-sm">Not linked to any project yet.</p>
+        {% endif %}
+      </div>
+      
+      <!-- Change/Add project dropdown -->
+      <form class="flex gap-2 mt-3" hx-post="/epics/{{ epic.key }}/assign" hx-target="#epic-projects" hx-swap="innerHTML">
+        <select name="project_id" style="flex:1">
+          <option value="">{% if epic.project %}Change project...{% else %}Link to project...{% endif %}</option>
+          {% for p in all_projects if not epic.project or p.id != epic.project.id %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-primary">{% if epic.project %}Change{% else %}Link{% endif %}</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+.epic-key-lg {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #4c9aff;
+  background: #0d2e52;
+  border: 1px solid #1e4a80;
+  border-radius: 4px;
+  padding: 4px 10px;
+  text-decoration: none;
+}
+
+.epic-key-lg:hover {
+  background: #1e4a80;
+}
+
+.progress-section {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tasks-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface2);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  text-decoration: none;
+  color: var(--text);
+  transition: background 0.15s;
+}
+
+.task-item:hover {
+  background: var(--surface);
+}
+
+.task-key-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4c9aff;
+  background: #0d2e52;
+  border: 1px solid #1e4a80;
+  border-radius: 3px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.task-title {
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+.task-assignee {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.linked-project-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.linked-project-item:last-child {
+  border-bottom: none;
+}
+</style>
+{% endblock %}

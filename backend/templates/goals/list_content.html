@@ -1,0 +1,108 @@
+<!-- Goals Kanban Board - HTMX partial -->
+
+<!-- OOB swap for page title (HTMX will process this) -->
+<h1 id="page-title" hx-swap-oob="true" style="display:none">Goals - {{ year }}</h1>
+
+<div class="filters-bar" style="margin-bottom:20px">
+  <div class="flex gap-3 items-center">
+    <div class="form-group" style="margin:0">
+      <label class="text-muted text-sm" style="margin-right: 6px;">Year:</label>
+      <select name="year" hx-get="/goals/" hx-target="#main-content" hx-push-url="true" style="min-width:100px">
+        {% for y in years %}
+        <option value="{{ y }}" {% if year == y %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <a href="/goals/new" class="btn btn-primary btn-sm">+ New Goal</a>
+</div>
+
+<div class="stats-bar" style="margin-bottom:16px">
+  <div class="stats-row">
+    <span class="stat-item"><span class="stat-value">{{ total_goals }}</span> goals</span>
+    <span class="stat-item text-green"><span class="stat-value">{{ achieved_goals }}</span> achieved</span>
+    <span class="stat-item"><span class="stat-value">{{ avg_progress }}%</span> avg progress</span>
+  </div>
+</div>
+
+<!-- Goal alignment callout -->
+{% if all_year_tasks > 0 %}
+<div class="card" style="margin-bottom:20px;padding:16px 20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <div>
+      <span style="font-weight:600;font-size:.95rem">Goal Alignment</span>
+      <span class="text-muted text-sm" style="margin-left:8px">of {{ year }} tasks contributing to a goal</span>
+    </div>
+    <span style="font-size:1.4rem;font-weight:700;
+      color:{% if alignment_pct >= 70 %}var(--green){% elif alignment_pct >= 40 %}var(--yellow){% else %}var(--red){% endif %}">
+      {{ alignment_pct }}%
+    </span>
+  </div>
+  <div class="progress-bar" style="height:8px;margin-bottom:10px">
+    <div class="progress-fill" style="width:{{ alignment_pct }}%;
+      background:{% if alignment_pct >= 70 %}var(--green){% elif alignment_pct >= 40 %}var(--yellow){% else %}var(--red){% endif %}">
+    </div>
+  </div>
+  <div style="display:flex;gap:20px;font-size:.82rem">
+    <span style="color:var(--green)">&#x2714; {{ aligned_tasks }} aligned</span>
+    {% if unaligned_tasks > 0 %}
+    <span style="color:var(--muted)">&#x25CB; {{ unaligned_tasks }} not linked to any goal</span>
+    {% endif %}
+    <span style="color:var(--muted)">{{ all_year_tasks }} total tasks in {{ year }}</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="kanban-board" id="goals-kanban">
+  <!-- Active Column -->
+  <div class="kanban-column" data-status="active">
+    <div class="kanban-column-header">
+      <h3>Active</h3>
+      <span class="badge badge-sm">{{ goals_by_status.active|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for goal in goals_by_status.active %}
+      {% include "goals/goal_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Achieved Column -->
+  <div class="kanban-column" data-status="achieved">
+    <div class="kanban-column-header achieved">
+      <h3>Achieved</h3>
+      <span class="badge badge-sm badge-success">{{ goals_by_status.achieved|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for goal in goals_by_status.achieved %}
+      {% include "goals/goal_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Deferred Column -->
+  <div class="kanban-column" data-status="deferred">
+    <div class="kanban-column-header">
+      <h3>Deferred</h3>
+      <span class="badge badge-sm">{{ goals_by_status.deferred|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for goal in goals_by_status.deferred %}
+      {% include "goals/goal_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Cancelled Column -->
+  <div class="kanban-column" data-status="cancelled">
+    <div class="kanban-column-header">
+      <h3>Cancelled</h3>
+      <span class="badge badge-sm">{{ goals_by_status.cancelled|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for goal in goals_by_status.cancelled %}
+      {% include "goals/goal_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+</div>

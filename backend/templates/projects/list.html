@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block page_title %}Projects{% endblock %}
+{% block topbar_actions %}
+  <a href="/projects/board" class="btn btn-ghost btn-sm">Board View</a>
+  <a href="/projects/new" class="btn btn-primary btn-sm">+ New Project</a>
+{% endblock %}
+
+{% block content %}
+{% if projects %}
+<div class="grid">
+  {% for p in projects %}
+  <div class="card" style="padding:16px 20px">
+    <div class="flex justify-between items-center">
+      <div style="flex:1">
+        <div class="flex items-center gap-2">
+          <a href="/projects/{{ p.id }}" style="color:var(--text);text-decoration:none;font-size:1rem;font-weight:600">{{ p.name }}</a>
+          <span class="badge badge-{{ p.status.value }}">{{ p.status.value }}</span>
+          <span class="badge badge-{{ p.priority.value }}">{{ p.priority.value }}</span>
+        </div>
+        {% if p.description %}
+        <p class="text-muted mt-2">{{ p.description[:120] }}{% if p.description|length > 120 %}…{% endif %}</p>
+        {% endif %}
+        <div class="text-muted mt-2">
+          {{ p.notes|length }} note{{ 's' if p.notes|length != 1 }} &nbsp;·&nbsp;
+          {{ p.reminders|length }} reminder{{ 's' if p.reminders|length != 1 }} &nbsp;·&nbsp;
+          Updated {{ p.updated_at.strftime('%b %d') }}
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <a href="/tasks/?project_id={{ p.id }}" class="btn btn-primary btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:4px"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>
+          Board
+        </a>
+        <a href="/projects/{{ p.id }}" class="btn btn-ghost btn-sm">Details</a>
+        <form method="post" action="/projects/{{ p.id }}/delete"
+              hx-post="/projects/{{ p.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+              onsubmit="return confirm('Delete project and all its data?')">
+          <button class="btn btn-danger btn-sm">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">📂</div>
+  <p>No projects yet.</p>
+  <a href="/projects/new" class="btn btn-primary mt-3">Create your first project</a>
+</div>
+{% endif %}
+{% endblock %}

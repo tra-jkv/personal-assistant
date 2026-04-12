@@ -1,0 +1,285 @@
+{% if report %}
+
+<!-- Summary -->
+{% if report.summary %}
+<div class="report-section">
+  <div class="report-section-title">Summary</div>
+  <div class="report-stat-grid">
+    <div class="report-stat">
+      <div class="report-stat-number accent">{{ report.summary.total_commits|default(0) }}</div>
+      <div class="report-stat-label">Commits</div>
+    </div>
+    <div class="report-stat">
+      <div class="report-stat-number green">{{ report.summary.total_prs|default(0) }}</div>
+      <div class="report-stat-label">Pull Requests</div>
+    </div>
+    <div class="report-stat">
+      <div class="report-stat-number yellow">{{ report.summary.jira_worked|default(0) }}</div>
+      <div class="report-stat-label">Jira Issues Worked</div>
+    </div>
+    <div class="report-stat">
+      <div class="report-stat-number orange">{{ report.summary.jira_transitions|default(0) }}</div>
+      <div class="report-stat-label">Status Changes</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- GitHub Activity -->
+{% if report.github and 'error' not in report.github %}
+<div class="report-section">
+  <div class="report-section-title">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-soft)"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+    GitHub Activity
+  </div>
+
+  <!-- Commits -->
+  {% if report.github.commits %}
+  <div class="report-subsection">
+    <div class="report-subsection-title">Commits ({{ report.github.commits|length }})</div>
+    {% for commit in report.github.commits[:10] %}
+    <div class="report-item">
+      <div class="report-accent-bar blue"></div>
+      <div class="report-item-left">
+        <div class="report-item-repo">{{ commit.repo }}</div>
+        <div class="report-item-title">{{ commit.message }}</div>
+        <div class="report-item-meta">
+          <span>{{ commit.sha[:7] }}</span>
+          <span>{{ commit.timestamp }}</span>
+        </div>
+      </div>
+      {% if commit.url %}
+      <a href="{{ commit.url }}" target="_blank" class="report-link">View →</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if report.github.commits|length > 10 %}
+    <div style="font-size:.75rem;color:var(--muted);padding:8px 0">+ {{ report.github.commits|length - 10 }} more</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Pull Requests -->
+  {% if report.github.pull_requests %}
+  <div class="report-subsection">
+    <div class="report-subsection-title">Pull Requests ({{ report.github.pull_requests|length }})</div>
+    {% for pr in report.github.pull_requests %}
+    <div class="report-item">
+      <div class="report-accent-bar green"></div>
+      <div class="report-item-left">
+        <div class="report-item-repo">{{ pr.repo }}</div>
+        <div class="report-item-title">{{ pr.title }}</div>
+        <div class="report-item-meta">
+          <span class="report-pill {{ pr.state }}">{{ pr.state }}</span>
+          <span>#{{ pr.number }}</span>
+          <span>{{ pr.created_at }}</span>
+        </div>
+      </div>
+      {% if pr.url %}
+      <a href="{{ pr.url }}" target="_blank" class="report-link">View →</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Issues -->
+  {% if report.github.issues %}
+  <div class="report-subsection">
+    <div class="report-subsection-title">Issues ({{ report.github.issues|length }})</div>
+    {% for issue in report.github.issues %}
+    <div class="report-item">
+      <div class="report-accent-bar yellow"></div>
+      <div class="report-item-left">
+        <div class="report-item-repo">{{ issue.repo }}</div>
+        <div class="report-item-title">{{ issue.title }}</div>
+        <div class="report-item-meta">
+          <span class="report-pill {{ issue.state }}">{{ issue.state }}</span>
+          <span>#{{ issue.number }}</span>
+          <span>{{ issue.created_at }}</span>
+        </div>
+      </div>
+      {% if issue.url %}
+      <a href="{{ issue.url }}" target="_blank" class="report-link">View →</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Reviews -->
+  {% if report.github.reviews %}
+  <div class="report-subsection">
+    <div class="report-subsection-title">Code Reviews ({{ report.github.reviews|length }})</div>
+    {% for review in report.github.reviews %}
+    <div class="report-item">
+      <div class="report-accent-bar purple"></div>
+      <div class="report-item-left">
+        <div class="report-item-repo">{{ review.repo }}</div>
+        <div class="report-item-title">PR #{{ review.pr_number }}: {{ review.pr_title }}</div>
+        <div class="report-item-meta">
+          <span class="report-pill {% if review.state == 'APPROVED' %}approved{% elif review.state == 'CHANGES_REQUESTED' %}changes{% else %}default{% endif %}">{{ review.state }}</span>
+          <span>{{ review.submitted_at }}</span>
+        </div>
+      </div>
+      {% if review.url %}
+      <a href="{{ review.url }}" target="_blank" class="report-link">View →</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not report.github.commits and not report.github.pull_requests and not report.github.issues and not report.github.reviews %}
+  <div class="empty-state" style="padding:24px">
+    <div class="icon">📦</div>
+    <p>No GitHub activity found for this period.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% elif report.github and 'error' in report.github %}
+<div class="report-error mb-3">
+  <div style="font-weight:600;margin-bottom:4px;color:var(--red)">GitHub Error</div>
+  <div style="font-size:.82rem;color:var(--text-soft)">{{ report.github.error }}</div>
+</div>
+{% endif %}
+
+<!-- Jira Activity -->
+{% if report.jira and 'error' not in report.jira %}
+<div class="report-section">
+  <div class="report-section-title">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--blue)"><path d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.004-1.005zm5.723-5.756H5.757a5.215 5.215 0 0 0 5.214 5.214h2.129v2.058a5.218 5.218 0 0 0 5.215 5.214V6.762a1.005 1.005 0 0 0-1.021-1.005zM23.013 0H11.455a5.215 5.215 0 0 0 5.215 5.215h2.129v2.057A5.215 5.215 0 0 0 24.019 12.49V1.005A1.005 1.005 0 0 0 23.013 0z"/></svg>
+    Jira Activity
+  </div>
+
+  {% if report.jira.assigned_issues %}
+  <div class="report-subsection">
+    <div class="report-subsection-title">Assigned Issues ({{ report.jira.assigned_issues|length }})</div>
+    {% for issue in report.jira.assigned_issues[:10] %}
+    <div class="report-item">
+      <div class="report-accent-bar blue"></div>
+      <div class="report-item-left">
+        <div class="report-item-repo">{{ issue.key }}</div>
+        <div class="report-item-title">{{ issue.summary }}</div>
+        <div class="report-item-meta">
+          <span class="report-pill default">{{ issue.status }}</span>
+          <span class="report-pill default">{{ issue.issue_type }}</span>
+          {% if issue.priority %}<span>Priority: {{ issue.priority }}</span>{% endif %}
+        </div>
+      </div>
+      {% if issue.url %}
+      <a href="{{ issue.url }}" target="_blank" class="report-link">View →</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if report.jira.assigned_issues|length > 10 %}
+    <div style="font-size:.75rem;color:var(--muted);padding:8px 0">+ {{ report.jira.assigned_issues|length - 10 }} more</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if report.jira.worked_issues %}
+  <div class="report-subsection">
+    <div class="report-subsection-title">Issues Worked On ({{ report.jira.worked_issues|length }})</div>
+    {% for issue in report.jira.worked_issues %}
+    <div class="report-item">
+      <div class="report-accent-bar green"></div>
+      <div class="report-item-left">
+        <div class="report-item-repo">{{ issue.key }}</div>
+        <div class="report-item-title">{{ issue.summary }}</div>
+        <div class="report-item-meta">
+          <span class="report-pill default">{{ issue.status }}</span>
+          <span class="report-pill default">{{ issue.issue_type }}</span>
+        </div>
+      </div>
+      {% if issue.url %}
+      <a href="{{ issue.url }}" target="_blank" class="report-link">View →</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if report.jira.transitions %}
+  <div class="report-subsection">
+    <div class="report-subsection-title">Status Changes ({{ report.jira.transitions|length }})</div>
+    {% for trans in report.jira.transitions %}
+    <div class="report-item">
+      <div class="report-accent-bar orange"></div>
+      <div class="report-item-left">
+        <div class="report-item-repo">{{ trans.issue_key }}</div>
+        <div class="report-item-title" style="display:flex;align-items:center;gap:8px">
+          <span class="report-pill default">{{ trans.from_status }}</span>
+          <span style="color:var(--muted)">→</span>
+          <span class="report-pill open">{{ trans.to_status }}</span>
+        </div>
+        <div class="report-item-meta"><span>{{ trans.timestamp }}</span></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if report.jira.comments %}
+  <div class="report-subsection">
+    <div class="report-subsection-title">Comments ({{ report.jira.comments|length }})</div>
+    {% for comment in report.jira.comments[:5] %}
+    <div class="report-item">
+      <div class="report-accent-bar purple"></div>
+      <div class="report-item-left">
+        <div class="report-item-repo">{{ comment.issue_key }}</div>
+        <div class="report-item-title" style="font-size:.8rem;color:var(--text-soft)">{{ comment.body[:200] }}{% if comment.body|length > 200 %}…{% endif %}</div>
+        <div class="report-item-meta"><span>{{ comment.timestamp }}</span></div>
+      </div>
+    </div>
+    {% endfor %}
+    {% if report.jira.comments|length > 5 %}
+    <div style="font-size:.75rem;color:var(--muted);padding:8px 0">+ {{ report.jira.comments|length - 5 }} more</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if not report.jira.assigned_issues and not report.jira.worked_issues and not report.jira.transitions and not report.jira.comments %}
+  <div class="empty-state" style="padding:24px">
+    <div class="icon">🎯</div>
+    <p>No Jira activity found for this period.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% elif report.jira and 'error' in report.jira %}
+<div class="report-error mb-3">
+  <div style="font-weight:600;margin-bottom:4px;color:var(--red)">Jira Error</div>
+  <div style="font-size:.82rem;color:var(--text-soft)">{{ report.jira.error }}</div>
+</div>
+{% endif %}
+
+<!-- Warnings -->
+{% if report.errors %}
+<div class="report-warning mb-3">
+  <div style="font-weight:600;margin-bottom:8px;color:var(--yellow)">⚠ Warnings</div>
+  <ul style="list-style:none;display:flex;flex-direction:column;gap:4px">
+    {% for error in report.errors %}
+    <li style="font-size:.82rem;color:var(--text-soft)">{{ error }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<!-- Sync info -->
+{% if report.sync_info %}
+<div class="report-sync-info">
+  <span style="font-weight:600">Sync period:</span>
+  {% if report.sync_info.github_since %} GitHub since {{ report.sync_info.github_since }}{% endif %}
+  {% if report.sync_info.jira_since %} · Jira since {{ report.sync_info.jira_since }}{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state" style="padding:64px 24px">
+  <div class="icon">📋</div>
+  <h3>No report data</h3>
+  <p>Click "Sync Now" to fetch your latest GitHub and Jira activity.</p>
+</div>
+{% endif %}

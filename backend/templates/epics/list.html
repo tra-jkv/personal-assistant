@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+{% block title %}Epics{% endblock %}
+{% block page_title %}
+  {% if current_project %}
+    <a href="/projects/{{ current_project.id }}" style="color:var(--muted);text-decoration:none">{{ current_project.name }}</a> 
+    <span style="color:var(--muted);margin:0 8px">/</span> 
+    Epics
+  {% else %}
+    Jira Epics
+  {% endif %}
+{% endblock %}
+{% block topbar_actions %}
+  {% if current_project %}
+    <a href="/epics/" class="btn btn-ghost btn-sm">All Epics</a>
+  {% endif %}
+
+{% endblock %}
+
+{% block content %}
+<div class="filters-bar">
+  <div class="flex gap-3 items-center">
+    <div class="filter-tabs">
+      <a href="/epics/{% if project_id %}?project_id={{ project_id }}{% endif %}" class="filter-tab {% if not filter %}active{% endif %}">All</a>
+      <a href="/epics/?filter=assigned{% if project_id %}&project_id={{ project_id }}{% endif %}" class="filter-tab {% if filter == 'assigned' %}active{% endif %}">Assigned</a>
+      <a href="/epics/?filter=unassigned{% if project_id %}&project_id={{ project_id }}{% endif %}" class="filter-tab {% if filter == 'unassigned' %}active{% endif %}">Unassigned</a>
+    </div>
+    <label class="toggle-label">
+      <input type="checkbox" id="hide-empty-epics" onchange="applyEpicFilters()">
+      <span>Hide epics with no stories</span>
+    </label>
+    <label class="toggle-label">
+      <input type="checkbox" id="goal-alignment-view" onchange="applyEpicFilters()">
+      <span>Goal alignment view</span>
+    </label>
+  </div>
+  <div class="stats-row">
+    <span class="stat-item"><span class="stat-value">{{ total_epics }}</span> epics</span>
+    <span class="stat-item text-blue"><span class="stat-value">{{ in_progress_epics }}</span> in dev</span>
+    <span class="stat-item text-green"><span class="stat-value">{{ done_epics }}</span> done</span>
+    <span class="stat-item text-muted"><span class="stat-value">{{ unassigned_epics }}</span> unassigned</span>
+  </div>
+</div>
+
+<div class="kanban-board kanban-5-col" id="epics-kanban">
+  {% for col in columns %}
+  <div class="kanban-column" data-status="{{ col.key }}">
+    <div class="kanban-column-header {% if col.key == 'done' %}done{% elif col.key == 'in_development' %}in-progress{% endif %}">
+      <h3>{{ col.label }}</h3>
+      <span class="badge badge-sm">{{ epics_by_status[col.key]|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for epic in epics_by_status[col.key] %}
+      {% include "epics/epic_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Goal alignment view (hidden by default) -->
+<div id="goal-alignment-board" style="display:none">
+  <div class="alignment-section">
+    <div class="alignment-section-header alignment-has-goal">
+      <h3>&#x2714; Aligned to a Goal</h3>
+      <span class="badge badge-sm badge-success" id="goal-count">0</span>
+    </div>
+    <div class="alignment-cards" id="aligned-cards"></div>
+  </div>
+  <div class="alignment-section">
+    <div class="alignment-section-header alignment-no-goal">
+      <h3>&#x25CB; No Goal</h3>
+      <span class="badge badge-sm" id="no-goal-count">0</span>
+    </div>
+    <div class="alignment-cards" id="unaligned-cards"></div>
+  </div>
+</div>
+
+<script>
+function applyEpicFilters() {
+  const hideEmpty = document.getElementById('hide-empty-epics')?.checked || false;
+  const goalView = document.getElementById('goal-alignment-view')?.checked || false;
+
+  localStorage.setItem('hideEmptyEpics', hideEmpty);
+  localStorage.setItem('goalAlignmentView', goalView);
+
+  const kanban = document.getElementById('epics-kanban');
+  const alignBoard = document.getElementById('goal-alignment-board');
+
+  if (goalView) {
+    kanban.style.display = 'none';
+    alignBoard.style.display = '';
+
+    const alignedEl = document.getElementById('aligned-cards');
+    const unalignedEl = document.getElementById('unaligned-cards');
+    alignedEl.innerHTML = '';
+    unalignedEl.innerHTML = '';
+
+    let alignedCount = 0, unalignedCount = 0;
+
+    document.querySelectorAll('#epics-kanban .epic-card').forEach(card => {
+      const hasStories = card.dataset.hasStories === 'true';
+      if (hideEmpty && !hasStories) return;
+      const hasGoal = card.dataset.hasGoal === 'true';
+      const clone = card.cloneNode(true);
+      clone.style.display = '';
+      if (hasGoal) {
+        alignedEl.appendChild(clone);
+        alignedCount++;
+      } else {
+        unalignedEl.appendChild(clone);
+        unalignedCount++;
+      }
+    });
+
+    document.getElementById('goal-count').textContent = alignedCount;
+    document.getElementById('no-goal-count').textContent = unalignedCount;
+  } else {
+    kanban.style.display = '';
+    alignBoard.style.display = 'none';
+
+    document.querySelectorAll('#epics-kanban .epic-card').forEach(card => {
+      const hasStories = card.dataset.hasStories === 'true';
+      card.style.display = (hideEmpty && !hasStories) ? 'none' : '';
+    });
+
+    document.querySelectorAll('#epics-kanban .kanban-column').forEach(col => {
+      const visible = col.querySelectorAll('.epic-card:not([style*="display: none"]):not([style*="display:none"])').length;
+      const badge = col.querySelector('.badge-sm');
+      if (badge) badge.textContent = visible;
+    });
+  }
+}
+
+// Restore preferences on page load
+document.addEventListener('DOMContentLoaded', function() {
+  const hideEmpty = localStorage.getItem('hideEmptyEpics') === 'true';
+  const goalView = localStorage.getItem('goalAlignmentView') === 'true';
+  const cbEmpty = document.getElementById('hide-empty-epics');
+  const cbGoal = document.getElementById('goal-alignment-view');
+  if (cbEmpty) cbEmpty.checked = hideEmpty;
+  if (cbGoal) cbGoal.checked = goalView;
+  if (hideEmpty || goalView) applyEpicFilters();
+});
+</script>
+
+<style>
+.filters-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.filter-tab {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.filter-tab:hover {
+  color: var(--text);
+}
+
+.filter-tab.active {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.toggle-label:hover {
+  background: var(--surface2);
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.stats-row {
+  display: flex;
+  gap: 20px;
+}
+
+.stat-item {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.stat-item .stat-value {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stat-item.text-green .stat-value { color: var(--green); }
+.stat-item.text-blue .stat-value { color: #4c9aff; }
+.stat-item.text-muted .stat-value { color: var(--muted); }
+
+.kanban-board {
+  display: grid;
+  gap: 12px;
+  min-height: calc(100vh - 220px);
+}
+
+.kanban-5-col {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.kanban-column {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  max-height: calc(100vh - 220px);
+}
+
+.kanban-column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+  border-radius: var(--radius) var(--radius) 0 0;
+  flex-shrink: 0;
+}
+
+.kanban-column-header.done {
+  background: rgba(34, 197, 94, 0.1);
+  border-bottom-color: rgba(34, 197, 94, 0.3);
+}
+
+.kanban-column-header.in-progress {
+  background: rgba(76, 154, 255, 0.1);
+  border-bottom-color: rgba(76, 154, 255, 0.3);
+}
+
+.kanban-column-header h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.kanban-cards {
+  flex: 1;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.epic-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  transition: all 0.15s ease;
+}
+
+.epic-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.epic-card.assigned {
+  border-left: 3px solid var(--green);
+}
+
+.epic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.epic-key {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #4c9aff;
+  background: #0d2e52;
+  border: 1px solid #1e4a80;
+  border-radius: 3px;
+  padding: 2px 6px;
+  text-decoration: none;
+}
+
+.epic-key:hover {
+  background: #1e4a80;
+}
+
+.epic-title {
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.epic-title a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.epic-title a:hover {
+  color: var(--accent);
+}
+
+.epic-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.epic-stories {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.epic-projects {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.epic-project-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+}
+
+.epic-project-tag .remove-btn {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.epic-project-tag .remove-btn:hover {
+  color: var(--red);
+}
+
+.epic-assign {
+  display: flex;
+  gap: 6px;
+}
+
+.epic-assign select {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 4px 6px;
+}
+
+.epic-assign button {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+
+/* Responsive */
+@media (max-width: 1400px) {
+  .kanban-5-col {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Goal alignment view */
+#goal-alignment-board {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.alignment-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.alignment-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.alignment-section-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.alignment-has-goal {
+  background: rgba(34, 197, 94, 0.08);
+  border-bottom-color: rgba(34, 197, 94, 0.25);
+}
+
+.alignment-has-goal h3 { color: var(--green); }
+
+.alignment-no-goal {
+  background: rgba(255, 170, 0, 0.08);
+  border-bottom-color: rgba(255, 170, 0, 0.25);
+}
+
+.alignment-no-goal h3 { color: var(--yellow, #ffaa00); }
+
+.alignment-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  padding: 14px;
+}
+</style>
+{% endblock %}

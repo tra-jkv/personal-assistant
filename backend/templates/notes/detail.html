@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title }}{% endblock %}
+{% block page_title %}{{ note.title }}{% endblock %}
+{% block topbar_actions %}
+  <a href="/notes/" class="btn btn-ghost btn-sm">← All Notes</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:720px">
+  <div class="card">
+    <form method="post" action="/notes/{{ note.id }}/edit"
+          hx-post="/notes/{{ note.id }}/edit" hx-target="#main-content" hx-swap="innerHTML">
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" name="title" value="{{ note.title }}" required />
+      </div>
+      <div class="form-group">
+        <label>Content</label>
+        <textarea name="content" style="min-height:300px">{{ note.content }}</textarea>
+      </div>
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label>Tags</label>
+          <input type="text" name="tags" value="{{ note.tags }}" placeholder="comma-separated" />
+        </div>
+        <div class="form-group">
+          <label>Project</label>
+          <select name="project_id">
+            <option value="">— No project —</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}" {{ 'selected' if note.project_id == p.id }}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <form method="post" action="/notes/{{ note.id }}/delete"
+              hx-post="/notes/{{ note.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+              onsubmit="return confirm('Delete this note?')">
+          <button class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+    </form>
+    <div class="text-muted text-sm mt-3">
+      Created {{ note.created_at.strftime('%b %d, %Y') }} &nbsp;·&nbsp; Updated {{ note.updated_at.strftime('%b %d, %Y %H:%M') }}
+    </div>
+  </div>
+
+  <!-- External Links -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">External Links ({{ links|length }})</span>
+      <a href="/links/new?note_id={{ note.id }}" class="btn btn-primary btn-sm">+ Link</a>
+    </div>
+    {% if links %}
+    <ul class="item-list">
+      {% for lnk in links %}
+      <li>
+        <span class="link-type-badge link-type-{{ lnk.link_type.value }}">{{ lnk.link_type.value }}</span>
+        <div style="flex:1;min-width:0">
+          <a href="{{ lnk.url }}" target="_blank" rel="noopener noreferrer"
+             style="color:var(--accent-h);font-weight:500;text-decoration:none;word-break:break-all">
+            {{ lnk.title }}
+          </a>
+          {% if lnk.description %}
+          <div class="text-muted text-sm mt-2">{{ lnk.description }}</div>
+          {% endif %}
+        </div>
+        <form method="post" action="/links/{{ lnk.id }}/delete"
+              hx-post="/links/{{ lnk.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+              style="flex-shrink:0">
+          <button type="submit" class="btn btn-danger btn-sm">✕</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted text-sm">No links yet. Attach GitHub repos, Jira tickets, or Confluence pages.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

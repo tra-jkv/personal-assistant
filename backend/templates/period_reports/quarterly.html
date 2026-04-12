@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}Quarterly Report{% endblock %}
+{% block page_title %}Quarterly Report{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/daily-report/" class="btn btn-ghost btn-sm">Daily Report</a>
+  <a href="/monthly-report/" class="btn btn-ghost btn-sm">Monthly Report</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not github_configured and not jira_configured %}
+<div class="card" style="margin-bottom:24px;background:var(--surface2);border-left:4px solid var(--yellow)">
+  <h3 style="margin:0 0 12px 0;color:var(--yellow)">⚙️ Setup Required</h3>
+  <p>Configure GitHub and/or Jira integration to view monthly reports.</p>
+  <p class="text-muted text-sm" style="margin-top:12px">
+    See <a href="/daily-report/">Daily Report</a> page for setup instructions.
+  </p>
+</div>
+{% endif %}
+
+{% if report %}
+
+<!-- Period Header -->
+<div class="card" style="margin-bottom:24px;background:linear-gradient(135deg, var(--accent-h) 0%, var(--accent) 100%);color:white">
+  <h2 style="margin:0 0 8px 0">📊 {{ report.period }} Report</h2>
+  <p style="margin:0;opacity:0.9">{{ report.start_date }} to {{ report.end_date }} ({{ report.days }} days)</p>
+</div>
+
+<!-- Summary Statistics -->
+<div class="grid grid-3" style="margin-bottom:24px">
+  <div class="card">
+    <h3 style="margin:0 0 16px 0;color:var(--muted);font-size:0.9rem">Total Activity</h3>
+    <div style="font-size:3rem;font-weight:bold;color:var(--accent)">{{ report.summary.total_activities }}</div>
+    <p class="text-muted text-sm" style="margin-top:8px">Commits + PRs + Reviews + Issues</p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 16px 0;color:var(--muted);font-size:0.9rem">GitHub Contributions</h3>
+    <div style="font-size:3rem;font-weight:bold;color:var(--blue)">{{ report.summary.total_commits }}</div>
+    <p class="text-muted text-sm" style="margin-top:8px">
+      Commits | {{ report.summary.total_prs }} PRs | {{ report.summary.total_reviews }} Reviews
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 16px 0;color:var(--muted);font-size:0.9rem">Jira Activity</h3>
+    <div style="font-size:3rem;font-weight:bold;color:var(--purple)">{{ report.summary.total_jira_issues }}</div>
+    <p class="text-muted text-sm" style="margin-top:8px">
+      Issues | {{ report.summary.total_jira_transitions }} Transitions
+    </p>
+  </div>
+</div>
+
+<!-- GitHub Insights -->
+{% if github_configured and report.statistics.github %}
+<div class="card" style="margin-bottom:24px">
+  <h2 style="margin:0 0 20px 0">📦 GitHub Insights</h2>
+
+  <div class="grid grid-2" style="margin-bottom:24px">
+    <div>
+      <h3 style="font-size:0.9rem;color:var(--muted);margin:0 0 12px 0">Productivity Metrics</h3>
+      <div style="padding:16px;background:var(--surface2);border-radius:8px">
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Avg commits/day:</span>
+          <span style="float:right;font-weight:bold">{{ report.insights.github.daily_avg_commits }}</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Avg PRs/day:</span>
+          <span style="float:right;font-weight:bold">{{ report.insights.github.daily_avg_prs }}</span>
+        </div>
+        <div>
+          <span style="color:var(--muted)">Productivity Score:</span>
+          <span style="float:right;font-weight:bold;color:var(--green)">{{ report.insights.github.productivity_score }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="font-size:0.9rem;color:var(--muted);margin:0 0 12px 0">Activity Breakdown</h3>
+      <div style="padding:16px;background:var(--surface2);border-radius:8px">
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Total Commits:</span>
+          <span style="float:right;font-weight:bold">{{ report.statistics.github.total_commits }}</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Pull Requests:</span>
+          <span style="float:right;font-weight:bold">{{ report.statistics.github.total_prs }}</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Code Reviews:</span>
+          <span style="float:right;font-weight:bold">{{ report.statistics.github.total_reviews }}</span>
+        </div>
+        <div>
+          <span style="color:var(--muted)">Issues:</span>
+          <span style="float:right;font-weight:bold">{{ report.statistics.github.total_issues }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Repositories -->
+  {% if report.statistics.github.top_repositories %}
+  <div>
+    <h3 style="font-size:0.9rem;color:var(--muted);margin:0 0 12px 0">Top Repositories</h3>
+    <div style="padding:16px;background:var(--surface2);border-radius:8px">
+      {% for repo, count in report.statistics.github.top_repositories[:5] %}
+      <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+        <span>{{ repo }}</span>
+        <span style="background:var(--blue);color:white;padding:2px 8px;border-radius:4px;font-size:0.85rem">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- PR Status -->
+  {% if report.statistics.github.prs_by_state %}
+  <div style="margin-top:20px">
+    <h3 style="font-size:0.9rem;color:var(--muted);margin:0 0 12px 0">Pull Request Status</h3>
+    <div style="padding:16px;background:var(--surface2);border-radius:8px">
+      {% for state, count in report.statistics.github.prs_by_state.items() %}
+      <div style="margin-bottom:8px">
+        <span class="badge {% if state == 'open' %}badge-high{% elif state == 'closed' %}badge-low{% else %}badge-medium{% endif %}">
+          {{ state }}
+        </span>
+        <span style="margin-left:8px;font-weight:bold">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Jira Insights -->
+{% if jira_configured and report.statistics.jira %}
+<div class="card" style="margin-bottom:24px">
+  <h2 style="margin:0 0 20px 0">🎯 Jira Insights</h2>
+
+  <div class="grid grid-2" style="margin-bottom:24px">
+    <div>
+      <h3 style="font-size:0.9rem;color:var(--muted);margin:0 0 12px 0">Delivery Metrics</h3>
+      <div style="padding:16px;background:var(--surface2);border-radius:8px">
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Tickets Completed:</span>
+          <span style="float:right;font-weight:bold;color:var(--green)">{{ report.insights.jira.tickets_completed }}</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Completion Rate:</span>
+          <span style="float:right;font-weight:bold">{{ report.insights.jira.completion_rate }}%</span>
+        </div>
+        <div>
+          <span style="color:var(--muted)">Avg issues/day:</span>
+          <span style="float:right;font-weight:bold">{{ report.insights.jira.daily_avg_issues }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="font-size:0.9rem;color:var(--muted);margin:0 0 12px 0">Activity Summary</h3>
+      <div style="padding:16px;background:var(--surface2);border-radius:8px">
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Assigned Issues:</span>
+          <span style="float:right;font-weight:bold">{{ report.statistics.jira.total_assigned }}</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <span style="color:var(--muted)">Status Changes:</span>
+          <span style="float:right;font-weight:bold">{{ report.statistics.jira.total_transitions }}</span>
+        </div>
+        <div>
+          <span style="color:var(--muted)">Comments:</span>
+          <span style="float:right;font-weight:bold">{{ report.statistics.jira.total_comments }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Issues by Status -->
+  {% if report.statistics.jira.issues_by_status %}
+  <div>
+    <h3 style="font-size:0.9rem;color:var(--muted);margin:0 0 12px 0">Issues by Status</h3>
+    <div style="padding:16px;background:var(--surface2);border-radius:8px">
+      {% for status, count in report.statistics.jira.issues_by_status.items() %}
+      <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+        <span>{{ status }}</span>
+        <span style="background:var(--purple);color:white;padding:2px 8px;border-radius:4px;font-size:0.85rem">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Issues by Type -->
+  {% if report.statistics.jira.issues_by_type %}
+  <div style="margin-top:20px">
+    <h3 style="font-size:0.9rem;color:var(--muted);margin:0 0 12px 0">Issues by Type</h3>
+    <div style="padding:16px;background:var(--surface2);border-radius:8px">
+      {% for issue_type, count in report.statistics.jira.issues_by_type.items() %}
+      <div style="margin-bottom:8px">
+        <span class="badge badge-medium">{{ issue_type }}</span>
+        <span style="margin-left:8px;font-weight:bold">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Errors -->
+{% if report.errors %}
+<div class="card" style="background:var(--yellow-light);border-left:4px solid var(--yellow)">
+  <h3 style="margin:0 0 12px 0;color:var(--yellow)">⚠️ Warnings</h3>
+  <ul style="margin:0;padding-left:20px">
+    {% for error in report.errors %}
+    <li>{{ error }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% else %}
+
+<!-- No Report Available -->
+<div class="card">
+  <h3 style="margin-top:0">No Data Available</h3>
+  <p>Configure GitHub and/or Jira integration to view your monthly report.</p>
+  <a href="/daily-report/" class="btn btn-primary" style="margin-top:16px">Setup Integrations</a>
+</div>
+
+{% endif %}
+
+{% endblock %}

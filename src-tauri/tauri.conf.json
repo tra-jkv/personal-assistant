@@ -1,0 +1,27 @@
+{
+  "build": {
+    "beforeDevCommand": "python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:8000",
+    "frontendDist": "../backend/static"
+  },
+  "identifier": "ai.personal-assistant.app",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Engineering Hub",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "url": "http://localhost:8000"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"]
+  }
+}

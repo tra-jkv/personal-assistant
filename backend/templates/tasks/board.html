@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Tasks{% endblock %}
+{% block page_title %}Tasks{% endblock %}
+
+{% block topbar_actions %}
+  <!-- Epic filter -->
+  <select id="epic-filter" onchange="filterEpic(this.value)"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:5px 10px;font-size:.82rem;cursor:pointer;max-width:180px">
+    <option value="">All Epics</option>
+    {% for e in epics %}
+    <option value="{{ e.key }}" {{ 'selected' if active_epic_key == e.key }}>{{ e.key }}: {{ e.title[:30] }}{% if e.title|length > 30 %}...{% endif %}</option>
+    {% endfor %}
+  </select>
+  
+  <!-- Project filter -->
+  <select id="project-filter" onchange="filterProject(this.value)"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:5px 10px;font-size:.82rem;cursor:pointer">
+    <option value="">All Projects</option>
+    {% for p in projects %}
+    <option value="{{ p.id }}" {{ 'selected' if active_project_id == p.id }}>{{ p.name }}</option>
+    {% endfor %}
+  </select>
+  
+  <button onclick="document.getElementById('add-task-modal').style.display='flex'"
+          class="btn btn-primary btn-sm">+ Add Task</button>
+  
+
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats bar -->
+<div class="filters-bar">
+  <div class="flex gap-3 items-center">
+    <span class="text-muted text-sm">Tasks from Jira (synced) and manual entries</span>
+  </div>
+  <div class="stats-row">
+    <span class="stat-item"><span class="stat-value">{{ total_tasks }}</span> tasks</span>
+    <span class="stat-item text-blue"><span class="stat-value">{{ in_progress_tasks }}</span> in progress</span>
+    <span class="stat-item text-green"><span class="stat-value">{{ done_tasks }}</span> done</span>
+  </div>
+</div>
+
+<!-- Kanban board -->
+{% include "tasks/board_content.html" %}
+
+<!-- Add Task Modal -->
+<div id="add-task-modal" class="modal-backdrop" style="display:none"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="card-title">New Task</span>
+      <button onclick="document.getElementById('add-task-modal').style.display='none'"
+              class="btn btn-ghost btn-sm">x</button>
+    </div>
+    <form method="post" action="/tasks/new"
+          hx-post="/tasks/new" hx-target="#main-content" hx-swap="innerHTML"
+          onsubmit="document.getElementById('add-task-modal').style.display='none'">
+      <input type="hidden" name="status" id="add-status" value="To Do" />
+
+      <div class="form-group">
+        <label>Title <span style="color:var(--red)">*</span></label>
+        <input type="text" name="title" required autofocus />
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea name="description" style="min-height:60px"></textarea>
+      </div>
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label>Epic</label>
+          <select name="epic_key">
+            <option value="">— No Epic —</option>
+            {% for e in epics %}
+            <option value="{{ e.key }}" {{ 'selected' if active_epic_key == e.key }}>{{ e.key }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Project</label>
+          <select name="project_id">
+            <option value="">— No Project —</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}" {{ 'selected' if active_project_id == p.id }}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select name="status" id="add-status-select">
+            {% for col in board_columns %}
+            <option value="{{ column_labels[col] }}">{{ column_labels[col] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <select name="priority">
+            {% for p in priorities %}
+            <option value="{{ p.value }}" {{ 'selected' if p.value == 'medium' }}>{{ p.value|capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Assignee</label>
+          <input type="text" name="assignee" placeholder="Name" />
+        </div>
+        <div class="form-group">
+          <label>Due date</label>
+          <input type="date" name="due_date" />
+        </div>
+        <div class="form-group" style="grid-column: span 2">
+          <label>Jira Key (optional - link to existing Jira issue)</label>
+          <input type="text" name="jira_key" placeholder="e.g. DL-1234" />
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Create Task</button>
+    </form>
+  </div>
+</div>
+
+
+<!-- Edit Task Modal -->
+<div id="edit-task-modal" class="modal-backdrop" style="display:none"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="card-title">Edit Task</span>
+      <button onclick="document.getElementById('edit-task-modal').style.display='none'"
+              class="btn btn-ghost btn-sm">x</button>
+    </div>
+    <form id="edit-task-form" method="post" action=""
+          hx-target="#main-content" hx-swap="innerHTML"
+          onsubmit="document.getElementById('edit-task-modal').style.display='none'">
+      <div class="form-group">
+        <label>Title <span style="color:var(--red)">*</span></label>
+        <input type="text" name="title" id="edit-title" required />
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea name="description" id="edit-description" style="min-height:60px"></textarea>
+      </div>
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label>Epic</label>
+          <select name="epic_key" id="edit-epic-key">
+            <option value="">— No Epic —</option>
+            {% for e in epics %}
+            <option value="{{ e.key }}">{{ e.key }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Project</label>
+          <select name="project_id" id="edit-project-id">
+            <option value="">— No Project —</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select name="status" id="edit-status">
+            {% for col in board_columns %}
+            <option value="{{ column_labels[col] }}">{{ column_labels[col] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <select name="priority" id="edit-priority">
+            {% for p in priorities %}
+            <option value="{{ p.value }}">{{ p.value|capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Assignee</label>
+          <input type="text" name="assignee" id="edit-assignee" />
+        </div>
+        <div class="form-group">
+          <label>Due date</label>
+          <input type="date" name="due_date" id="edit-due-date" />
+        </div>
+        <div class="form-group" style="grid-column: span 2">
+          <label>Jira Key</label>
+          <input type="text" name="jira_key" id="edit-jira-key" placeholder="e.g. DL-1234" />
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<script>
+function filterProject(projectId) {
+  let url = '/tasks/';
+  const epicKey = document.getElementById('epic-filter').value;
+  const params = new URLSearchParams();
+  if (projectId) params.set('project_id', projectId);
+  if (epicKey) params.set('epic_key', epicKey);
+  if (params.toString()) url += '?' + params.toString();
+  htmx.ajax('GET', url, { target: '#main-content', swap: 'innerHTML' });
+}
+
+function filterEpic(epicKey) {
+  let url = '/tasks/';
+  const projectId = document.getElementById('project-filter').value;
+  const params = new URLSearchParams();
+  if (projectId) params.set('project_id', projectId);
+  if (epicKey) params.set('epic_key', epicKey);
+  if (params.toString()) url += '?' + params.toString();
+  htmx.ajax('GET', url, { target: '#main-content', swap: 'innerHTML' });
+}
+
+function quickAdd(statusValue) {
+  document.getElementById('add-status-select').value = statusValue;
+  document.getElementById('add-task-modal').style.display = 'flex';
+}
+
+function openEditModal(id, title, desc, status, priority, assignee, dueDate, jiraKey, epicKey, projectId) {
+  const form = document.getElementById('edit-task-form');
+  form.action = '/tasks/' + id + '/edit';
+  form.setAttribute('hx-post', '/tasks/' + id + '/edit');
+  htmx.process(form);
+
+  document.getElementById('edit-title').value = title;
+  document.getElementById('edit-description').value = desc;
+  document.getElementById('edit-status').value = status;
+  document.getElementById('edit-priority').value = priority;
+  document.getElementById('edit-assignee').value = assignee;
+  document.getElementById('edit-due-date').value = dueDate || '';
+  document.getElementById('edit-jira-key').value = jiraKey || '';
+  document.getElementById('edit-epic-key').value = epicKey || '';
+  document.getElementById('edit-project-id').value = projectId || '';
+
+  document.getElementById('edit-task-modal').style.display = 'flex';
+}
+</script>
+
+<style>
+.filters-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.stats-row {
+  display: flex;
+  gap: 20px;
+}
+
+.stat-item {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.stat-item .stat-value {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stat-item.text-green .stat-value { color: var(--green); }
+.stat-item.text-blue .stat-value { color: #4c9aff; }
+</style>
+
+{% endblock %}

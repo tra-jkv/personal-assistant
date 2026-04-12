@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block page_title %}Projects{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/projects/new" class="btn btn-primary btn-sm">+ New Project</a>
+{% endblock %}
+
+{% block content %}
+<div class="filters-bar">
+  <div class="flex gap-3 items-center">
+    <span class="text-muted text-sm">Drag-and-drop projects between columns to change status</span>
+  </div>
+  <div class="stats-row">
+    <span class="stat-item"><span class="stat-value">{{ total_projects }}</span> projects</span>
+    <span class="stat-item text-blue"><span class="stat-value">{{ active_projects }}</span> active</span>
+    <span class="stat-item text-green"><span class="stat-value">{{ completed_projects }}</span> completed</span>
+  </div>
+</div>
+
+{% include "projects/board_content.html" %}
+
+<style>
+.filters-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.stats-row {
+  display: flex;
+  gap: 20px;
+}
+
+.stat-item {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.stat-item .stat-value {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stat-item.text-green .stat-value { color: var(--green); }
+.stat-item.text-blue .stat-value { color: #4c9aff; }
+</style>
+{% endblock %}

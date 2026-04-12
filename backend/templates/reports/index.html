@@ -1,0 +1,1140 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block page_title %}Reports{% endblock %}
+
+{% block topbar_actions %}
+<div class="view-tabs">
+  <a href="/reports/?view=day&year={{ year }}&month={{ month }}" class="view-tab {% if view == 'day' %}active{% endif %}">Day</a>
+  <a href="/reports/?view=month&year={{ year }}&month={{ month }}" class="view-tab {% if view == 'month' %}active{% endif %}">Month</a>
+  <a href="/reports/?view=quarter&year={{ year }}&quarter={{ quarter }}" class="view-tab {% if view == 'quarter' %}active{% endif %}">Quarter</a>
+  <a href="/reports/?view=year&year={{ year }}" class="view-tab {% if view == 'year' %}active{% endif %}">Year</a>
+</div>
+<button id="sync-btn" class="btn btn-ghost btn-sm" onclick="startSync(this)">
+  <span id="sync-spinner" class="spinner-small" style="display:none"></span>
+  <span id="sync-btn-label">Sync Data</span>
+</button>
+<div id="sync-status"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _syncPoller = null;
+
+function pollSyncStatus() {
+  fetch('/reports/sync-status')
+    .then(r => r.json())
+    .then(data => {
+      const btn = document.getElementById('sync-btn');
+      const label = document.getElementById('sync-btn-label');
+      const spinner = document.getElementById('sync-spinner');
+      const status = document.getElementById('sync-status');
+
+      if (data.running) {
+        // Sync is running — show progress, disable button
+        btn.disabled = true;
+        spinner.style.display = 'inline-block';
+        label.textContent = data.progress || 'Syncing…';
+        status.innerHTML = `<div class="sync-result">Sync in progress: ${data.progress || '…'}</div>`;
+
+        // Keep polling every 3s
+        if (!_syncPoller) {
+          _syncPoller = setInterval(pollSyncStatus, 3000);
+        }
+      } else {
+        // Not running — clear poller
+        if (_syncPoller) {
+          clearInterval(_syncPoller);
+          _syncPoller = null;
+          // Was running before, now done — reload to show fresh data
+          btn.disabled = false;
+          spinner.style.display = 'none';
+          label.textContent = 'Sync Data';
+          status.innerHTML = '<div class="sync-result success">Sync complete — reloading…</div>';
+          setTimeout(() => location.reload(), 2000);
+          return;
+        }
+
+        btn.disabled = false;
+        spinner.style.display = 'none';
+        label.textContent = 'Sync Data';
+
+        if (!data.up_to_date) {
+          const lastSynced = data.last_synced ? `Last synced: ${data.last_synced}.` : 'Never synced.';
+          status.innerHTML = `<div class="sync-result error">${lastSynced} Data may be incomplete — click Sync Data to load.</div>`;
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+// Check on page load
+document.addEventListener('DOMContentLoaded', pollSyncStatus);
+
+function startSync(btn) {
+  if (btn.disabled) return;
+
+  const label = document.getElementById('sync-btn-label');
+  const spinner = document.getElementById('sync-spinner');
+  const status = document.getElementById('sync-status');
+
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+  label.textContent = 'Starting…';
+  status.innerHTML = '<div class="sync-result">Starting sync…</div>';
+
+  fetch('/reports/sync', { method: 'POST' })
+    .then(r => r.text())
+    .then(html => {
+      spinner.style.display = 'none';
+      btn.disabled = false;
+      label.textContent = 'Sync Data';
+      status.innerHTML = html;
+      setTimeout(() => { status.innerHTML = ''; location.reload(); }, 3000);
+    })
+    .catch(err => {
+      spinner.style.display = 'none';
+      btn.disabled = false;
+      label.textContent = 'Sync Data';
+      status.innerHTML = `<div class="sync-result error">Sync failed: ${err.message}</div>`;
+      setTimeout(() => { status.innerHTML = ''; }, 5000);
+    });
+
+  // Start polling for progress while sync runs
+  if (!_syncPoller) {
+    setTimeout(() => { _syncPoller = setInterval(pollSyncStatus, 3000); }, 1000);
+  }
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="reports-layout">
+  <!-- Left: Calendar & Navigation -->
+  <div class="reports-sidebar">
+    <!-- Period Selector for Month/Quarter views -->
+    {% if view == "month" %}
+    <div class="period-selector card">
+      <div class="period-nav">
+        {% set prev_month = month - 1 if month > 1 else 12 %}
+        {% set prev_year = year if month > 1 else year - 1 %}
+        {% set next_month = month + 1 if month < 12 else 1 %}
+        {% set next_year = year if month < 12 else year + 1 %}
+        <a href="/reports/?view=month&year={{ prev_year }}&month={{ prev_month }}" class="period-btn">&larr; Prev</a>
+        <span class="period-current">{{ calendar.month_name }} {{ year }}</span>
+        <a href="/reports/?view=month&year={{ next_year }}&month={{ next_month }}" class="period-btn">Next &rarr;</a>
+      </div>
+    </div>
+    {% elif view == "quarter" %}
+    <div class="period-selector card">
+      <div class="period-nav">
+        {% set prev_q = quarter - 1 if quarter > 1 else 4 %}
+        {% set prev_y = year if quarter > 1 else year - 1 %}
+        {% set next_q = quarter + 1 if quarter < 4 else 1 %}
+        {% set next_y = year if quarter < 4 else year + 1 %}
+        <a href="/reports/?view=quarter&year={{ prev_y }}&quarter={{ prev_q }}" class="period-btn">&larr; Q{{ prev_q }} {{ prev_y }}</a>
+        <span class="period-current">Q{{ quarter }} {{ year }}</span>
+        <a href="/reports/?view=quarter&year={{ next_y }}&quarter={{ next_q }}" class="period-btn">Q{{ next_q }} {{ next_y }} &rarr;</a>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Calendar (for day view) -->
+    <div class="calendar-card">
+      <div class="calendar-header">
+        {% set prev_month = calendar.month - 1 if calendar.month > 1 else 12 %}
+        {% set prev_year = calendar.year if calendar.month > 1 else calendar.year - 1 %}
+        {% set next_month = calendar.month + 1 if calendar.month < 12 else 1 %}
+        {% set next_year = calendar.year if calendar.month < 12 else calendar.year + 1 %}
+        <a href="/reports/?view={{ view }}&year={{ prev_year }}&month={{ prev_month }}{% if view == 'quarter' %}&quarter={{ quarter }}{% endif %}" class="cal-nav">&lt;</a>
+        <span class="cal-title">{{ calendar.month_name }} {{ calendar.year }}</span>
+        <a href="/reports/?view={{ view }}&year={{ next_year }}&month={{ next_month }}{% if view == 'quarter' %}&quarter={{ quarter }}{% endif %}" class="cal-nav">&gt;</a>
+      </div>
+      <div class="calendar-grid">
+        <div class="cal-weekdays">
+          {% for day in calendar.weekdays %}
+          <div class="cal-weekday">{{ day }}</div>
+          {% endfor %}
+        </div>
+        {% for week in calendar.weeks %}
+        <div class="cal-week">
+          {% for cell in week %}
+          {% if cell.day %}
+          <a href="/reports/?view=day&date={{ cell.date }}&year={{ calendar.year }}&month={{ calendar.month }}" 
+             class="cal-day {% if cell.date == today %}today{% endif %} {% if cell.activity > 0 %}has-activity{% endif %} {% if selected_date == cell.date %}selected{% endif %}">
+            {{ cell.day }}
+            {% if cell.activity > 0 %}
+            <span class="activity-dot"></span>
+            {% endif %}
+          </a>
+          {% else %}
+          <div class="cal-day empty"></div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Quick Navigation -->
+    <div class="quick-nav">
+      <h4>Quick Access</h4>
+      <a href="/reports/?view=day" class="btn btn-ghost btn-sm w-100">Today</a>
+      <a href="/reports/?view=month" class="btn btn-ghost btn-sm w-100">This Month</a>
+      <a href="/reports/?view=quarter" class="btn btn-ghost btn-sm w-100">This Quarter</a>
+    </div>
+
+    <!-- Integration Status -->
+    <div class="integration-status">
+      <h4>Integrations</h4>
+      <div class="integration-row">
+        <span>GitHub</span>
+        {% if github_configured %}
+        <span class="status-dot active"></span>
+        {% else %}
+        <span class="status-dot inactive"></span>
+        {% endif %}
+      </div>
+      <div class="integration-row">
+        <span>Jira</span>
+        {% if jira_configured %}
+        <span class="status-dot active"></span>
+        {% else %}
+        <span class="status-dot inactive"></span>
+        {% endif %}
+      </div>
+      {% if github_info and github_info.last_sync %}
+      <div class="text-muted text-sm" style="margin-top:8px">
+        Last sync: {{ github_info.last_sync }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right: Report Content -->
+  <div class="reports-main">
+    <div class="report-header">
+      <h2>{{ period_label }}</h2>
+    </div>
+
+    <!-- Trend Chart -->
+    <div class="trend-chart-container card">
+      <div class="card-header">
+        <span class="card-title">Activity Trend</span>
+        <div class="chart-legend">
+          {% for dataset in trend_data.datasets %}
+          <span class="legend-item">
+            <span class="legend-color" style="background: {{ dataset.color }}"></span>
+            {{ dataset.label }}
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- AI Summary Section -->
+    <div class="ai-summary-section card">
+      <div class="card-header">
+        <span class="card-title">AI Summary</span>
+        <button class="btn btn-primary btn-sm"
+                hx-post="/reports/ai-summary?view={{ view }}{% if selected_date %}&date={{ selected_date }}{% endif %}&year={{ year }}&month={{ month }}&quarter={{ quarter }}"
+                hx-target="#ai-summary-content"
+                hx-swap="innerHTML"
+                hx-indicator="#ai-spinner">
+          <span id="ai-spinner" class="htmx-indicator spinner-small"></span>
+          Generate Summary
+        </button>
+      </div>
+      <div id="ai-summary-content" class="ai-summary-content">
+        <p class="text-muted">Click "Generate Summary" to create an AI-powered summary of your work for this period.</p>
+      </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="report-summary">
+      <div class="summary-stat">
+        <div class="stat-value">{{ report.summary.commits|default(0) }}</div>
+        <div class="stat-label">Commits</div>
+      </div>
+      <div class="summary-stat">
+        <div class="stat-value">{{ report.summary.prs|default(0) }}</div>
+        <div class="stat-label">Pull Requests</div>
+      </div>
+      <div class="summary-stat">
+        <div class="stat-value">{{ report.summary.reviews|default(0) }}</div>
+        <div class="stat-label">Reviews</div>
+      </div>
+      <div class="summary-stat">
+        <div class="stat-value">{{ report.summary.jira_issues|default(0) }}</div>
+        <div class="stat-label">Jira Issues</div>
+      </div>
+    </div>
+
+    <!-- Activity Details -->
+    <div class="report-sections">
+      <!-- GitHub Section -->
+      <div class="report-section">
+        <div class="section-header">
+          <h3>GitHub Activity</h3>
+        </div>
+
+        {% if report.github.commits %}
+        <div class="activity-group">
+          <h4>Commits ({{ report.github.commits|length }})</h4>
+          <div class="activity-list">
+            {% for commit in report.github.commits[:15] %}
+            <div class="activity-item commit">
+              <div class="activity-icon">
+                <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="3"/></svg>
+              </div>
+              <div class="activity-content">
+                <span class="repo-tag">{{ commit.repo }}</span>
+                <div class="activity-title">{{ commit.title }}</div>
+                {% if commit.url %}
+                <a href="{{ commit.url }}" target="_blank" class="activity-link">View</a>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+            {% if report.github.commits|length > 15 %}
+            <div class="more-items">+ {{ report.github.commits|length - 15 }} more commits</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if report.github.pull_requests %}
+        <div class="activity-group">
+          <h4>Pull Requests ({{ report.github.pull_requests|length }})</h4>
+          <div class="activity-list">
+            {% for pr in report.github.pull_requests %}
+            <div class="activity-item pr">
+              <div class="activity-icon">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878Zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm3-8.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"/></svg>
+              </div>
+              <div class="activity-content">
+                <span class="repo-tag">{{ pr.repo }}</span>
+                <div class="activity-title">{{ pr.title }}</div>
+                {% if pr.status %}
+                <span class="pr-status {{ pr.status|lower }}">{{ pr.status }}</span>
+                {% endif %}
+                {% if pr.url %}
+                <a href="{{ pr.url }}" target="_blank" class="activity-link">View</a>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if report.github.reviews %}
+        <div class="activity-group">
+          <h4>Code Reviews ({{ report.github.reviews|length }})</h4>
+          <div class="activity-list">
+            {% for review in report.github.reviews %}
+            <div class="activity-item review">
+              <div class="activity-icon">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 2.75a.25.25 0 0 1 .25-.25h8.5a.25.25 0 0 1 .25.25v5.5a.25.25 0 0 1-.25.25h-3.5a.75.75 0 0 0-.53.22L3.5 11.44V9.25a.75.75 0 0 0-.75-.75h-1a.25.25 0 0 1-.25-.25v-5.5ZM1.75 1A1.75 1.75 0 0 0 0 2.75v5.5C0 9.216.784 10 1.75 10H2v1.543a1.457 1.457 0 0 0 2.487 1.03L7.06 10h3.19A1.75 1.75 0 0 0 12 8.25v-5.5A1.75 1.75 0 0 0 10.25 1h-8.5Z"/></svg>
+              </div>
+              <div class="activity-content">
+                <span class="repo-tag">{{ review.repo }}</span>
+                <div class="activity-title">{{ review.title }}</div>
+                {% if review.url %}
+                <a href="{{ review.url }}" target="_blank" class="activity-link">View</a>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if not report.github.commits and not report.github.pull_requests and not report.github.reviews %}
+        <div class="empty-section">
+          <p>No GitHub activity for this period</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Jira Section -->
+      <div class="report-section">
+        <div class="section-header">
+          <h3>Jira Activity</h3>
+        </div>
+
+        {% if report.jira.assigned_issues %}
+        <div class="activity-group">
+          <h4>Assigned Issues ({{ report.jira.assigned_issues|length }})</h4>
+          <div class="activity-list">
+            {% for issue in report.jira.assigned_issues[:15] %}
+            <div class="activity-item jira">
+              <div class="activity-icon">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.775 3.275a.75.75 0 0 0 1.06 1.06l1.25-1.25a2 2 0 1 1 2.83 2.83l-2.5 2.5a2 2 0 0 1-2.83 0 .75.75 0 0 0-1.06 1.06 3.5 3.5 0 0 0 4.95 0l2.5-2.5a3.5 3.5 0 0 0-4.95-4.95l-1.25 1.25Zm-.025 5.425a.75.75 0 0 0-1.06 0l-1.25 1.25a2 2 0 1 1-2.83-2.83l2.5-2.5a2 2 0 0 1 2.83 0 .75.75 0 0 0 1.06-1.06 3.5 3.5 0 0 0-4.95 0l-2.5 2.5a3.5 3.5 0 0 0 4.95 4.95l1.25-1.25a.75.75 0 0 0 0-1.06Z"/></svg>
+              </div>
+              <div class="activity-content">
+                <span class="jira-key">{{ issue.key }}</span>
+                <div class="activity-title">{{ issue.summary }}</div>
+                {% if issue.status %}
+                <span class="jira-status">{{ issue.status }}</span>
+                {% endif %}
+                {% if issue.url %}
+                <a href="{{ issue.url }}" target="_blank" class="activity-link">View</a>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+            {% if report.jira.assigned_issues|length > 15 %}
+            <div class="more-items">+ {{ report.jira.assigned_issues|length - 15 }} more issues</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if report.jira.transitions %}
+        <div class="activity-group">
+          <h4>Status Changes ({{ report.jira.transitions|length }})</h4>
+          <div class="activity-list">
+            {% for trans in report.jira.transitions %}
+            <div class="activity-item transition">
+              <div class="activity-icon">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 8a.75.75 0 0 1 .75-.75h10.69L9.47 4.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l4 3.97a.75.75 0 0 1 0 1.06l-4 4.02a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l2.97-2.97H1.75A.75.75 0 0 1 1 8Z"/></svg>
+              </div>
+              <div class="activity-content">
+                <span class="jira-key">{{ trans.key }}</span>
+                <div class="activity-title">{{ trans.summary }}</div>
+                {% if trans.status %}
+                <span class="jira-status">{{ trans.status }}</span>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if not report.jira.assigned_issues and not report.jira.transitions %}
+        <div class="empty-section">
+          <p>No Jira activity for this period</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  
+  const trendData = {{ trend_data | tojson }};
+  
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: trendData.labels,
+      datasets: trendData.datasets.map(ds => ({
+        label: ds.label,
+        data: ds.data,
+        backgroundColor: ds.color + '99',
+        borderColor: ds.color,
+        borderWidth: 1,
+        borderRadius: 4,
+      }))
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        intersect: false,
+        mode: 'index'
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: '#1a1d27',
+          titleColor: '#e2e4f0',
+          bodyColor: '#e2e4f0',
+          borderColor: '#2e3250',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 8
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            color: '#2e3250',
+            drawBorder: false
+          },
+          ticks: {
+            color: '#6b7280',
+            maxRotation: 45,
+            minRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 15
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: '#2e3250',
+            drawBorder: false
+          },
+          ticks: {
+            color: '#6b7280',
+            stepSize: 1
+          }
+        }
+      }
+    }
+  });
+});
+</script>
+
+<style>
+/* Reports Layout */
+.reports-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  min-height: calc(100vh - 120px);
+}
+
+.reports-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reports-main {
+  overflow-y: auto;
+}
+
+/* View Tabs */
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface2);
+  padding: 4px;
+  border-radius: var(--radius);
+}
+
+.view-tab {
+  padding: 6px 16px;
+  font-size: .85rem;
+  color: var(--muted);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all .15s;
+}
+
+.view-tab:hover {
+  color: var(--text);
+}
+
+.view-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Period Selector */
+.period-selector {
+  padding: 12px 16px;
+}
+
+.period-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.period-btn {
+  color: var(--accent-h);
+  text-decoration: none;
+  font-size: .85rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all .15s;
+}
+
+.period-btn:hover {
+  background: var(--surface2);
+}
+
+.period-current {
+  font-weight: 600;
+  font-size: .95rem;
+}
+
+/* Calendar */
+.calendar-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.cal-nav {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all .15s;
+}
+
+.cal-nav:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.cal-title {
+  font-weight: 600;
+  font-size: .9rem;
+}
+
+.calendar-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.cal-weekday {
+  text-align: center;
+  font-size: .7rem;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .8rem;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 6px;
+  position: relative;
+  transition: all .15s;
+}
+
+.cal-day.empty {
+  visibility: hidden;
+}
+
+.cal-day:hover:not(.empty) {
+  background: var(--surface2);
+}
+
+.cal-day.today {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.cal-day.selected {
+  outline: 2px solid var(--accent-h);
+  outline-offset: 1px;
+}
+
+.cal-day.has-activity .activity-dot {
+  position: absolute;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  background: var(--green);
+  border-radius: 50%;
+}
+
+.cal-day.today .activity-dot {
+  background: #fff;
+}
+
+/* Quick Nav */
+.quick-nav {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.quick-nav h4 {
+  font-size: .8rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.quick-nav .btn {
+  margin-bottom: 8px;
+  justify-content: center;
+}
+
+.quick-nav .btn:last-child {
+  margin-bottom: 0;
+}
+
+/* Integration Status */
+.integration-status {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.integration-status h4 {
+  font-size: .8rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.integration-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: .85rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.active {
+  background: var(--green);
+}
+
+.status-dot.inactive {
+  background: var(--red);
+}
+
+/* Report Header */
+.report-header {
+  margin-bottom: 20px;
+}
+
+.report-header h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+/* Trend Chart */
+.trend-chart-container {
+  margin-bottom: 20px;
+}
+
+.trend-chart-container .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .8rem;
+  color: var(--muted);
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.chart-wrapper {
+  height: 200px;
+  position: relative;
+}
+
+/* Summary Stats */
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.summary-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent-h);
+}
+
+.stat-label {
+  font-size: .8rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Report Sections */
+.report-sections {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.report-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.section-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Activity Groups */
+.activity-group {
+  margin-bottom: 20px;
+}
+
+.activity-group:last-child {
+  margin-bottom: 0;
+}
+
+.activity-group h4 {
+  font-size: .85rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activity-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border-radius: 6px;
+  border-left: 3px solid var(--border);
+}
+
+.activity-item.commit {
+  border-left-color: #60a5fa;
+}
+
+.activity-item.pr {
+  border-left-color: var(--green);
+}
+
+.activity-item.review {
+  border-left-color: var(--accent);
+}
+
+.activity-item.jira {
+  border-left-color: #4c9aff;
+}
+
+.activity-item.transition {
+  border-left-color: var(--orange);
+}
+
+.activity-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+
+.activity-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.activity-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-title {
+  font-size: .85rem;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.repo-tag {
+  display: inline-block;
+  font-size: .7rem;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-bottom: 4px;
+}
+
+.jira-key {
+  display: inline-block;
+  font-size: .7rem;
+  font-weight: 700;
+  color: #4c9aff;
+  background: #0d2e52;
+  border: 1px solid #1e4a80;
+  border-radius: 3px;
+  padding: 2px 6px;
+  margin-bottom: 4px;
+}
+
+.jira-status {
+  display: inline-block;
+  font-size: .68rem;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 4px;
+}
+
+.pr-status {
+  display: inline-block;
+  font-size: .68rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 4px;
+}
+
+.pr-status.open {
+  color: var(--green);
+  background: #1a3a2a;
+}
+
+.pr-status.closed {
+  color: var(--red);
+  background: #3a1a1a;
+}
+
+.pr-status.merged {
+  color: var(--accent-h);
+  background: #2a2040;
+}
+
+.activity-link {
+  display: inline-block;
+  font-size: .75rem;
+  color: var(--accent-h);
+  text-decoration: none;
+  margin-top: 6px;
+}
+
+.activity-link:hover {
+  text-decoration: underline;
+}
+
+.more-items {
+  font-size: .8rem;
+  color: var(--muted);
+  padding: 8px 0;
+  text-align: center;
+}
+
+.empty-section {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .report-sections {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .reports-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .reports-sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  
+  .calendar-card {
+    flex: 1;
+    min-width: 260px;
+  }
+  
+  .quick-nav,
+  .integration-status {
+    flex: 1;
+    min-width: 200px;
+  }
+  
+  .report-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Sync button and status */
+.spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--surface2);
+  border-top: 2px solid var(--accent-h);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  display: none;
+  margin-right: 6px;
+}
+
+.htmx-request .spinner-small {
+  display: inline-block;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+#sync-status {
+  position: fixed;
+  top: 70px;
+  right: 24px;
+  z-index: 1000;
+}
+
+.sync-result {
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  font-size: .85rem;
+  animation: slideIn 0.3s ease;
+}
+
+.sync-result.success {
+  background: #1a3a2a;
+  color: var(--green);
+  border: 1px solid #2a5a3a;
+}
+
+.sync-result.error {
+  background: #3a1a1a;
+  color: var(--red);
+  border: 1px solid #5a2a2a;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* AI Summary Section */
+.ai-summary-section {
+  margin-bottom: 20px;
+}
+
+.ai-summary-section .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.ai-summary-content {
+  line-height: 1.7;
+  font-size: .9rem;
+}
+
+.ai-summary-content h4 {
+  font-size: .95rem;
+  font-weight: 600;
+  margin: 16px 0 8px 0;
+  color: var(--accent-h);
+}
+
+.ai-summary-content h4:first-child {
+  margin-top: 0;
+}
+
+.ai-summary-content p {
+  margin: 8px 0;
+}
+
+.ai-summary-content ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.ai-summary-content li {
+  margin: 6px 0;
+}
+
+.ai-summary-content.error {
+  color: var(--red);
+}
+
+.ai-summary-content code {
+  background: var(--surface2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: .85rem;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}External Links{% endblock %}
+{% block page_title %}External Links{% endblock %}
+{% block topbar_actions %}
+  <a href="/links/new" class="btn btn-primary btn-sm">+ Add Link</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Filter bar -->
+<div class="card" style="margin-bottom:16px">
+  <div class="flex gap-2" style="flex-wrap:wrap;align-items:center">
+    <span class="text-muted text-sm">Filter by type:</span>
+    <a href="/links/"
+       class="btn btn-sm {{ 'btn-primary' if not active_filter else 'btn-ghost' }}">All</a>
+    {% for lt in link_types %}
+    <a href="/links/?link_type={{ lt.value }}"
+       class="btn btn-sm link-type-btn-{{ lt.value }} {{ 'btn-primary' if active_filter == lt.value else 'btn-ghost' }}">
+      {{ lt.value | capitalize }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if links %}
+<div class="card">
+  <ul class="item-list">
+    {% for lnk in links %}
+    <li>
+      <span class="link-type-badge link-type-{{ lnk.link_type.value }}">{{ lnk.link_type.value }}</span>
+      <div style="flex:1;min-width:0">
+        <a href="{{ lnk.url }}" target="_blank" rel="noopener noreferrer"
+           style="color:var(--accent-h);font-weight:500;text-decoration:none;word-break:break-all">
+          {{ lnk.title }}
+        </a>
+        {% if lnk.description %}
+        <div class="text-muted text-sm mt-2">{{ lnk.description }}</div>
+        {% endif %}
+        <div class="text-muted text-sm mt-2">
+          {% if lnk.project %}
+            <a href="/projects/{{ lnk.project.id }}" style="color:var(--muted);text-decoration:none">
+              Project: {{ lnk.project.name }}
+            </a>
+          {% elif lnk.note %}
+            <a href="/notes/{{ lnk.note.id }}" style="color:var(--muted);text-decoration:none">
+              Note: {{ lnk.note.title }}
+            </a>
+          {% elif lnk.meeting %}
+            <a href="/meetings/{{ lnk.meeting.id }}" style="color:var(--muted);text-decoration:none">
+              Meeting: {{ lnk.meeting.title }}
+            </a>
+          {% else %}
+            Unlinked
+          {% endif %}
+          &nbsp;·&nbsp; {{ lnk.created_at.strftime('%b %d, %Y') }}
+        </div>
+      </div>
+      <form method="post" action="/links/{{ lnk.id }}/delete"
+            hx-post="/links/{{ lnk.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+            style="flex-shrink:0">
+        <button type="submit" class="btn btn-danger btn-sm">✕</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">🔗</div>
+  <p>No links yet.</p>
+  <a href="/links/new" class="btn btn-primary" style="margin-top:12px">Add your first link</a>
+</div>
+{% endif %}
+
+{% endblock %}

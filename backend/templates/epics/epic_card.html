@@ -1,0 +1,53 @@
+<div id="epic-{{ epic.key }}" class="epic-card {% if epic.project %}assigned{% endif %}"
+     data-has-stories="{{ 'true' if epic.tasks|length > 0 else 'false' }}"
+     data-has-goal="{{ 'true' if epic.project and epic.project.goals else 'false' }}"
+     onclick="window.location.href='/epics/{{ epic.key }}'" style="cursor:pointer">
+  <div class="epic-header" onclick="event.stopPropagation()">
+    <a href="{{ epic.jira_url }}" target="_blank" class="epic-key">{{ epic.key }}</a>
+  </div>
+
+  <div class="epic-title">
+    {{ epic.title }}
+  </div>
+
+  <div class="epic-meta">
+    {% set done_stories = epic.tasks|selectattr('status', 'in', ['Done', 'Closed', 'Resolved'])|list|length %}
+    {% if epic.tasks|length > 0 %}
+    <span>{{ done_stories }}/{{ epic.tasks|length }} my stories</span>
+    <div class="progress-bar" style="width:60px;height:4px">
+      {% set progress = (done_stories / epic.tasks|length * 100)|round if epic.tasks|length > 0 else 0 %}
+      <div class="progress-fill bg-success" style="width:{{ progress }}%"></div>
+    </div>
+    {% else %}
+    <span class="text-muted">no stories assigned</span>
+    {% endif %}
+    {% if not epic.project or not epic.project.goals %}
+    <span class="badge-no-goal">No goal</span>
+    {% endif %}
+  </div>
+
+  <!-- Assigned project (one-to-many: epic belongs to one project) -->
+  {% if epic.project %}
+  <div class="epic-projects" onclick="event.stopPropagation()">
+    <span class="epic-project-tag">
+      <a href="/projects/{{ epic.project.id }}" style="color:var(--text);text-decoration:none">{{ epic.project.name[:15] }}{% if epic.project.name|length > 15 %}...{% endif %}</a>
+      <button class="remove-btn" 
+            hx-post="/epics/{{ epic.key }}/unassign/{{ epic.project.id }}"
+            hx-target="#epic-{{ epic.key }}"
+            hx-swap="outerHTML"
+            title="Remove from project">&times;</button>
+    </span>
+  </div>
+  {% endif %}
+
+  <!-- Assign to project dropdown -->
+  <form class="epic-assign" onclick="event.stopPropagation()" hx-post="/epics/{{ epic.key }}/assign" hx-target="#epic-{{ epic.key }}" hx-swap="outerHTML">
+    <select name="project_id">
+      <option value="">{% if epic.project %}Change project...{% else %}+ Assign...{% endif %}</option>
+      {% for p in projects if not epic.project or p.id != epic.project.id %}
+      <option value="{{ p.id }}">{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm btn-ghost">{% if epic.project %}&#x21C4;{% else %}+{% endif %}</button>
+  </form>
+</div>

@@ -1,0 +1,17 @@
+<div id="progress-section">
+  <div class="flex justify-between items-center mb-2">
+    <span class="text-sm font-medium">Progress</span>
+    <span class="text-lg font-bold {% if goal.progress_pct >= 80 %}text-success{% elif goal.progress_pct >= 50 %}text-warning{% else %}text-muted{% endif %}">{{ goal.progress_pct }}%</span>
+  </div>
+  <div class="progress-bar" style="height:12px">
+    <div class="progress-fill {% if goal.progress_pct >= 80 %}bg-success{% elif goal.progress_pct >= 50 %}bg-warning{% else %}bg-primary{% endif %}" style="width:{{ goal.progress_pct }}%"></div>
+  </div>
+  
+  <!-- Quick progress update -->
+  <form class="flex gap-2 mt-3" hx-post="/goals/{{ goal.id }}/progress" hx-target="#progress-section" hx-swap="outerHTML">
+    <input type="range" name="progress_pct" min="0" max="100" value="{{ goal.progress_pct }}" 
+           oninput="this.nextElementSibling.value = this.value + '%'" style="flex:1" />
+    <output style="min-width:50px">{{ goal.progress_pct }}%</output>
+    <button type="submit" class="btn btn-sm btn-ghost">Update</button>
+  </form>
+</div>

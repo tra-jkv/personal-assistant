@@ -1,0 +1,119 @@
+<!-- Tasks Kanban Board -->
+<div class="kanban-board kanban-board-tasks">
+  {% for col in board_columns %}
+  {% set col_tasks = columns[col] %}
+  <div class="kanban-col">
+    <div class="kanban-col-header kanban-col-header-{{ col }}">
+      <span class="kanban-col-title">{{ column_labels[col] }}</span>
+      <span class="kanban-col-count">{{ col_tasks|length }}</span>
+    </div>
+
+    <div class="kanban-cards">
+      {% for task in col_tasks %}
+      {% set subtasks = task.subtasks_json | default('[]') | tojson | safe %}
+      <div class="kanban-card {% if task.jira_key %}jira-synced{% endif %} {% if task.needs_sync_back %}needs-sync{% endif %}"
+           onclick="window.location.href='/tasks/{{ task.id }}'" style="cursor:pointer">
+
+        <!-- Jira key pill -->
+        {% if task.jira_key %}
+        <div class="kanban-jira-key">
+          <a href="{{ task.jira_url }}" target="_blank" onclick="event.stopPropagation()">{{ task.jira_key }}</a>
+          {% if task.needs_sync_back %}
+          <span class="sync-indicator" title="Changes pending sync to Jira">*</span>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="kanban-card-title">{{ task.title }}</div>
+
+        {% if task.description %}
+        <div class="kanban-card-desc">{{ task.description[:100] }}{% if task.description|length > 100 %}...{% endif %}</div>
+        {% endif %}
+
+        <div class="kanban-card-meta">
+          <span class="badge badge-{{ task.priority.value if task.priority else 'medium' }}">{{ task.priority.value if task.priority else 'medium' }}</span>
+          {% if task.assignee %}<span class="text-muted text-sm">{{ task.assignee }}</span>{% endif %}
+          {% if task.due_date %}<span class="text-muted text-sm">{{ task.due_date }}</span>{% endif %}
+          
+          <!-- Subtask count -->
+          {% if task.subtasks_json and task.subtasks_json != '' and task.subtasks_json != '[]' %}
+          {% set subtask_list = task.subtasks_json | fromjson %}
+          {% set done_subtasks = subtask_list | selectattr('status', 'equalto', 'Done') | list | length %}
+          <span class="subtask-count" title="Subtasks">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: -2px;">
+              <path d="M2 2h12v2H2V2zm0 4h8v2H2V6zm0 4h10v2H2v-2z"/>
+            </svg>
+            {{ done_subtasks }}/{{ subtask_list | length }}
+          </span>
+          {% endif %}
+        </div>
+
+        <!-- Move controls -->
+        <div class="kanban-card-actions" onclick="event.stopPropagation()">
+          <form method="post" action="/tasks/{{ task.id }}/move"
+                hx-post="/tasks/{{ task.id }}/move" hx-target="#main-content" hx-swap="innerHTML"
+                style="display:inline">
+            <select name="status" onchange="this.form.submit()"
+                    style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:.72rem;padding:2px 4px;cursor:pointer">
+              {% for s in board_columns %}
+              <option value="{{ kanban_to_jira[s] }}" {{ 'selected' if s == col }}>
+                -> {{ column_labels[s] }}
+              </option>
+              {% endfor %}
+            </select>
+          </form>
+
+          <button onclick="event.stopPropagation(); openEditModal(
+            {{ task.id }},
+            '{{ task.title | replace("'", "\\'") | replace("\n", " ") }}',
+            '{{ task.description | replace("'", "\\'") | replace("\n", " ") if task.description else "" }}',
+            '{{ task.status }}',
+            '{{ task.priority.value if task.priority else "medium" }}',
+            '{{ task.assignee | replace("'", "\\'") if task.assignee else "" }}',
+            '{{ task.due_date.isoformat() if task.due_date else "" }}',
+            '{{ task.jira_key or "" }}',
+            '{{ task.epic_key or "" }}',
+            '{{ task.project_id or "" }}'
+          )" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:.72rem">Edit</button>
+
+          <form method="post" action="/tasks/{{ task.id }}/delete"
+                hx-post="/tasks/{{ task.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+                style="display:inline"
+                onsubmit="event.stopPropagation(); return confirm('Delete task?')">
+            <button type="submit" class="btn btn-danger btn-sm" style="padding:2px 6px;font-size:.72rem">x</button>
+          </form>
+        </div>
+
+        <!-- Epic/Project label -->
+        <div class="kanban-card-links" onclick="event.stopPropagation()">
+          {% if task.epic %}
+          <a href="/epics/{{ task.epic.key }}" class="link-tag epic-tag" title="{{ task.epic.title }}">{{ task.epic.key }}</a>
+          {% endif %}
+          {% if task.project %}
+          <a href="/projects/{{ task.project.id }}" class="link-tag project-tag">{{ task.project.name[:15] }}{% if task.project.name|length > 15 %}...{% endif %}</a>
+          {% endif %}
+        </div>
+
+      </div>
+      {% endfor %}
+
+      {% if col_tasks|length == 0 and col == 'backlog' and columns.values()|sum(attribute='__len__', default=0) == 0 %}
+      <div class="empty-state" style="padding:24px 12px">
+        <div class="icon">📋</div>
+        <h3 style="font-size:.82rem">No tasks yet</h3>
+        <p style="font-size:.75rem">Sync Jira to import your stories, or add a task manually.</p>
+        <div class="empty-action">
+          <a href="/reports/" class="btn btn-ghost btn-sm" style="margin-right:4px">Sync Jira</a>
+        </div>
+      </div>
+      {% endif %}
+      <!-- Quick-add inline placeholder -->
+      <div class="kanban-add-placeholder" onclick="quickAdd('{{ column_labels[col] }}')">
+        + add task
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+

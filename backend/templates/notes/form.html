@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}New Note{% endblock %}
+{% block page_title %}New Note{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:720px">
+  <form method="post" action="/notes/new"
+        hx-post="/notes/new" hx-target="#main-content" hx-swap="innerHTML">
+    <div class="form-group">
+      <label>Title *</label>
+      <input type="text" name="title" required autofocus placeholder="Note title" />
+    </div>
+    <div class="form-group">
+      <label>Content</label>
+      <textarea name="content" style="min-height:200px" placeholder="Write your note here…"></textarea>
+    </div>
+    <div class="grid grid-2">
+      <div class="form-group">
+        <label>Tags <span class="text-muted">(comma-separated)</span></label>
+        <input type="text" name="tags" placeholder="e.g. architecture, data-pipeline, urgent" />
+      </div>
+      <div class="form-group">
+        <label>Project</label>
+        <select name="project_id">
+          <option value="">— No project —</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {{ 'selected' if preselected_project_id == p.id }}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-primary">Save Note</button>
+      <a href="/notes/" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

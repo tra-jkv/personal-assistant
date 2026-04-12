@@ -1,0 +1,557 @@
+{% extends "base.html" %}
+{% block title %}{{ year }} Recap{% endblock %}
+{% block page_title %}Yearly Recap{% endblock %}
+
+{% block topbar_actions %}
+<div class="view-tabs">
+  <a href="/reports/?view=day" class="view-tab">Day</a>
+  <a href="/reports/?view=month" class="view-tab">Month</a>
+  <a href="/reports/?view=quarter" class="view-tab">Quarter</a>
+  <a href="/reports/?view=year" class="view-tab active">Year</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="year-recap">
+
+  <!-- Year selector -->
+  <div class="year-selector">
+    {% for y in available_years %}
+    <a href="/reports/?view=year&year={{ y }}"
+       class="btn btn-sm {% if y == year %}btn-primary{% else %}btn-ghost{% endif %}">
+      {{ y }}
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- ── Stat cards row ─────────────────────────────────────────────────── -->
+  <div class="recap-cards">
+    <!-- Goals -->
+    <div class="recap-card">
+      <div class="recap-card-icon">🎯</div>
+      <div class="recap-card-value">{{ recap.goals_achieved }}/{{ recap.goals_total }}</div>
+      <div class="recap-card-label">Goals achieved</div>
+      {% if recap.goals_total > 0 %}
+      <div class="recap-card-sub">
+        {{ recap.goals_active }} active · {{ recap.goals_deferred }} deferred
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Goal alignment -->
+    <div class="recap-card">
+      <div class="recap-card-icon">📐</div>
+      <div class="recap-card-value
+        {% if recap.alignment_pct >= 70 %}text-green
+        {% elif recap.alignment_pct >= 40 %}text-amber
+        {% else %}text-red{% endif %}">
+        {{ recap.alignment_pct }}%
+      </div>
+      <div class="recap-card-label">Work aligned to goals</div>
+      <div class="recap-card-sub">{{ recap.done_tasks }}/{{ recap.total_tasks }} tasks done</div>
+    </div>
+
+    <!-- Commits -->
+    <div class="recap-card">
+      <div class="recap-card-icon">⚡</div>
+      <div class="recap-card-value">{{ recap.total_commits }}</div>
+      <div class="recap-card-label">Commits</div>
+      <div class="recap-card-sub">across {{ recap.total_repos }} repos</div>
+    </div>
+
+    <!-- PRs -->
+    <div class="recap-card">
+      <div class="recap-card-icon">🔀</div>
+      <div class="recap-card-value">{{ recap.total_prs }}</div>
+      <div class="recap-card-label">Pull requests</div>
+      <div class="recap-card-sub">{{ recap.total_reviews }} reviews given</div>
+    </div>
+
+    <!-- Busiest month -->
+    <div class="recap-card">
+      <div class="recap-card-icon">🔥</div>
+      <div class="recap-card-value">{{ recap.busiest_month_label }}</div>
+      <div class="recap-card-label">Busiest month</div>
+      {% if recap.busiest_month %}
+      <div class="recap-card-sub">
+        {{ recap.monthly[recap.busiest_month].commits }} commits ·
+        {{ recap.monthly[recap.busiest_month].prs }} PRs
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Main content: AI narrative + side panels ───────────────────────── -->
+  <div class="recap-body">
+
+    <!-- AI narrative -->
+    <div class="recap-main">
+      <div class="card">
+        <div class="card-header flex justify-between items-center">
+          <h2 class="text-lg font-semibold">{{ year }} in Review</h2>
+          <button id="recap-btn" class="btn btn-primary btn-sm" onclick="generateRecap(this)">
+            <span id="recap-spinner" class="spinner-small" style="display:none"></span>
+            <span id="recap-btn-label">Generate AI Recap</span>
+          </button>
+        </div>
+        <div id="recap-content" class="card-body recap-narrative">
+          <p class="text-muted">Click "Generate AI Recap" to get an AI-written summary of your {{ year }}.</p>
+        </div>
+      </div>
+
+      <!-- Monthly activity bar chart -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <h3 class="text-base font-semibold">Monthly Activity</h3>
+        </div>
+        <div class="card-body">
+          <canvas id="monthlyChart" height="120"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side panels -->
+    <div class="recap-side">
+
+      <!-- Goals breakdown -->
+      {% if recap.goals %}
+      <div class="card">
+        <div class="card-header">
+          <h3 class="text-base font-semibold">Goals</h3>
+        </div>
+        <div class="card-body p-0">
+          {% for g in recap.goals %}
+          <div class="goal-row">
+            <div class="goal-row-header">
+              <span class="goal-status-dot status-{{ g.status }}"></span>
+              <span class="goal-row-title">{{ g.title }}</span>
+            </div>
+            <div class="goal-progress-bar">
+              <div class="goal-progress-fill
+                {% if g.progress_pct >= 70 %}fill-green
+                {% elif g.progress_pct >= 40 %}fill-amber
+                {% else %}fill-red{% endif %}"
+                style="width: {{ g.progress_pct }}%">
+              </div>
+            </div>
+            <div class="goal-row-meta">
+              {{ g.progress_pct }}% · {{ g.done_tasks }}/{{ g.total_tasks }} tasks · {{ g.status }}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Top projects -->
+      {% if recap.tasks_by_project %}
+      <div class="card mt-4">
+        <div class="card-header">
+          <h3 class="text-base font-semibold">Projects</h3>
+        </div>
+        <div class="card-body p-0">
+          {% for name, data in recap.tasks_by_project.items() %}
+          {% if loop.index <= 8 %}
+          <div class="project-row">
+            <div class="project-row-name">{{ name }}</div>
+            <div class="project-row-bar">
+              <div class="project-bar-done" style="width: {{ (data.done / data.total * 100) | int }}%"></div>
+            </div>
+            <div class="project-row-count">{{ data.done }}/{{ data.total }}</div>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Repos -->
+      {% if recap.repos %}
+      <div class="card mt-4">
+        <div class="card-header">
+          <h3 class="text-base font-semibold">Repos ({{ recap.total_repos }})</h3>
+        </div>
+        <div class="card-body">
+          <div class="repo-tags">
+            {% for repo in recap.repos %}
+            <span class="repo-tag">{{ repo.split('/')[-1] }}</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+
+<style>
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface2);
+  padding: 4px;
+  border-radius: var(--radius);
+}
+
+.view-tab {
+  padding: 6px 16px;
+  font-size: .85rem;
+  color: var(--muted);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all .15s;
+}
+
+.view-tab:hover { color: var(--text); }
+
+.view-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.year-recap {
+  padding: 0 0 40px 0;
+}
+
+.year-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+/* ── Stat cards ─────────────────────────────────────────────────────────── */
+.recap-cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.recap-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.recap-card-icon {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+}
+
+.recap-card-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.recap-card-label {
+  font-size: .8rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.recap-card-sub {
+  font-size: .75rem;
+  color: var(--text-muted);
+  opacity: .7;
+}
+
+/* ── Body layout ─────────────────────────────────────────────────────────── */
+.recap-body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+/* ── AI narrative ─────────────────────────────────────────────────────────── */
+.recap-narrative {
+  min-height: 120px;
+}
+
+.recap-narrative h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 16px 0 6px;
+  color: var(--text);
+}
+
+.recap-narrative h3:first-child {
+  margin-top: 0;
+}
+
+.recap-narrative ul {
+  margin: 6px 0 12px 16px;
+}
+
+.recap-narrative li {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+
+.recap-narrative p {
+  color: var(--text-muted);
+  font-size: .9rem;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+
+
+/* ── Goals panel ─────────────────────────────────────────────────────────── */
+.goal-row {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.goal-row:last-child { border-bottom: none; }
+
+.goal-row-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.goal-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-achieved { background: var(--green); }
+.status-active { background: var(--accent-h); }
+.status-deferred, .status-cancelled { background: var(--text-muted); }
+
+.goal-row-title {
+  font-size: .85rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.goal-progress-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.goal-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .3s;
+}
+
+.fill-green { background: var(--green); }
+.fill-amber { background: #f59e0b; }
+.fill-red { background: var(--red); }
+
+.goal-row-meta {
+  font-size: .72rem;
+  color: var(--text-muted);
+}
+
+/* ── Projects panel ──────────────────────────────────────────────────────── */
+.project-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.project-row:last-child { border-bottom: none; }
+
+.project-row-name {
+  font-size: .82rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-row-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.project-bar-done {
+  height: 100%;
+  background: var(--accent-h);
+  border-radius: 2px;
+  min-width: 2px;
+}
+
+.project-row-count {
+  font-size: .75rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* ── Repos ───────────────────────────────────────────────────────────────── */
+.repo-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.repo-tag {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: .75rem;
+  color: var(--text-muted);
+}
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--surface2);
+  border-top: 2px solid var(--accent-h);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  display: none;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ── Utility ─────────────────────────────────────────────────────────────── */
+.text-green { color: var(--green) !important; }
+.text-amber { color: #f59e0b !important; }
+.text-red { color: var(--red) !important; }
+.mt-4 { margin-top: 16px; }
+.card-header { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.card-body { padding: 16px; }
+.p-0 { padding: 0 !important; }
+.flex { display: flex; }
+.justify-between { justify-content: space-between; }
+.items-center { align-items: center; }
+
+@media (max-width: 900px) {
+  .recap-cards { grid-template-columns: repeat(2, 1fr); }
+  .recap-body { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+// Monthly activity chart
+const monthlyData = {
+  labels: [{% for m in range(1, 13) %}"{{ recap.monthly[m].label }}"{% if not loop.last %},{% endif %}{% endfor %}],
+  commits: [{% for m in range(1, 13) %}{{ recap.monthly[m].commits }}{% if not loop.last %},{% endif %}{% endfor %}],
+  prs:     [{% for m in range(1, 13) %}{{ recap.monthly[m].prs }}{% if not loop.last %},{% endif %}{% endfor %}],
+  reviews: [{% for m in range(1, 13) %}{{ recap.monthly[m].reviews }}{% if not loop.last %},{% endif %}{% endfor %}],
+};
+
+new Chart(document.getElementById('monthlyChart'), {
+  type: 'bar',
+  data: {
+    labels: monthlyData.labels,
+    datasets: [
+      {
+        label: 'Commits',
+        data: monthlyData.commits,
+        backgroundColor: '#60a5fa',
+        borderRadius: 3,
+        stack: 'activity',
+      },
+      {
+        label: 'PRs',
+        data: monthlyData.prs,
+        backgroundColor: '#22c55e',
+        borderRadius: 3,
+        stack: 'activity',
+      },
+      {
+        label: 'Reviews',
+        data: monthlyData.reviews,
+        backgroundColor: '#f97316',
+        borderRadius: 3,
+        stack: 'activity',
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          color: '#9ca3af',
+          boxWidth: 12,
+          padding: 16,
+          font: { size: 12 },
+        },
+      },
+      tooltip: {
+        callbacks: {
+          title: ctx => ctx[0].label,
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { display: false },
+        ticks: { color: '#6b7280', font: { size: 11 } },
+      },
+      y: {
+        stacked: true,
+        beginAtZero: true,
+        grid: { color: '#1f2937' },
+        ticks: { color: '#6b7280', font: { size: 11 }, precision: 0 },
+      },
+    },
+  },
+});
+
+function generateRecap(btn) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const label = document.getElementById('recap-btn-label');
+  const spinner = document.getElementById('recap-spinner');
+  const content = document.getElementById('recap-content');
+
+  spinner.style.display = 'inline-block';
+  label.textContent = 'Generating…';
+  content.innerHTML = '<p class="text-muted">Analysing your {{ year }}… this takes a few seconds.</p>';
+
+  fetch('/reports/ai-yearly-recap?year={{ year }}', { method: 'POST' })
+    .then(r => r.text())
+    .then(html => {
+      content.innerHTML = html;
+      spinner.style.display = 'none';
+      btn.disabled = false;
+      label.textContent = 'Regenerate';
+    })
+    .catch(err => {
+      content.innerHTML = `<p class="text-muted">Failed: ${err.message}</p>`;
+      spinner.style.display = 'none';
+      btn.disabled = false;
+      label.textContent = 'Generate AI Recap';
+    });
+}
+</script>
+{% endblock %}

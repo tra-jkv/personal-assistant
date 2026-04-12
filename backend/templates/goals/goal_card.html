@@ -1,0 +1,27 @@
+{% set gp = goal_progress[goal.id] if goal_progress is defined and goal.id in goal_progress else {"pct": 0, "done": 0, "total": 0} %}
+<a href="/goals/{{ goal.id }}" class="goal-card" id="goal-{{ goal.id }}">
+  <div class="goal-card-title">{{ goal.title }}</div>
+
+  <div class="goal-card-progress">
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill {% if gp.pct == 100 %}complete{% endif %}"
+           style="width: {{ gp.pct }}%"></div>
+    </div>
+  </div>
+
+  <div class="goal-card-meta">
+    <span>{{ gp.pct }}% complete</span>
+    <span class="text-muted" style="font-size:.72rem">{{ gp.done }}/{{ gp.total }} tasks</span>
+  </div>
+
+  {% if goal.projects %}
+  <div class="goal-card-projects">
+    {% for project in goal.projects[:3] %}
+    <span class="goal-project-tag">{{ project.name[:20] }}{% if project.name|length > 20 %}...{% endif %}</span>
+    {% endfor %}
+    {% if goal.projects|length > 3 %}
+    <span class="goal-project-tag">+{{ goal.projects|length - 3 }} more</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</a>

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Add External Link{% endblock %}
+{% block page_title %}Add External Link{% endblock %}
+{% block topbar_actions %}
+  <a href="/links/" class="btn btn-ghost btn-sm">← All Links</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:600px">
+  <form method="post" action="/links/new"
+        hx-post="/links/new" hx-target="#main-content" hx-swap="innerHTML">
+
+    <!-- Hidden context fields (pre-populated when coming from an entity page) -->
+    {% if prefill_project_id %}
+    <input type="hidden" name="project_id" value="{{ prefill_project_id }}" />
+    {% endif %}
+    {% if prefill_note_id %}
+    <input type="hidden" name="note_id" value="{{ prefill_note_id }}" />
+    {% endif %}
+    {% if prefill_meeting_id %}
+    <input type="hidden" name="meeting_id" value="{{ prefill_meeting_id }}" />
+    {% endif %}
+    {% if prefill_task_id %}
+    <input type="hidden" name="task_id" value="{{ prefill_task_id }}" />
+    {% endif %}
+
+    <div class="form-group">
+      <label>Title <span style="color:var(--red)">*</span></label>
+      <input type="text" name="title" required placeholder="e.g. Data pipeline repo, Sprint board, Design doc" />
+    </div>
+
+    <div class="form-group">
+      <label>URL <span style="color:var(--red)">*</span></label>
+      <input type="text" name="url" required placeholder="https://..." />
+    </div>
+
+    <div class="grid grid-2">
+      <div class="form-group">
+        <label>Type</label>
+        <select name="link_type">
+          {% for lt in link_types %}
+          <option value="{{ lt.value }}">{{ lt.value | capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Associate with a project (only shown when NOT pre-linked to a note/meeting/task) -->
+      {% if not prefill_note_id and not prefill_meeting_id and not prefill_task_id %}
+      <div class="form-group">
+        <label>Link to Project</label>
+        <select name="project_id">
+          <option value="">— None —</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {{ 'selected' if prefill_project_id == p.id }}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Task association (optional) -->
+    {% if not prefill_note_id and not prefill_meeting_id %}
+    <div class="form-group">
+      <label>Link to Task (Optional)</label>
+      <select name="task_id">
+        <option value="">— None —</option>
+        {% for task in tasks %}
+        <option value="{{ task.id }}" {{ 'selected' if prefill_task_id == task.id }}>
+          [{{ task.project.name }}] {{ task.title }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="form-group">
+      <label>Description</label>
+      <input type="text" name="description" placeholder="Optional short description" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save Link</button>
+  </form>
+</div>
+{% endblock %}

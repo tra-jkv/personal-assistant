@@ -1,0 +1,23 @@
+{% if goal.projects %}
+  {% for project in goal.projects %}
+  <div class="flex justify-between items-center p-3 mb-2" style="background:var(--surface);border-radius:8px">
+    <div>
+      <a href="/projects/{{ project.id }}" style="color:var(--text);text-decoration:none;font-weight:500">{{ project.name }}</a>
+      <span class="badge badge-{{ project.status.value }} ml-2">{{ project.status.value }}</span>
+      <div class="text-muted text-sm mt-1">
+        {{ project.epics|length }} epic{{ 's' if project.epics|length != 1 }} &nbsp;·&nbsp;
+        {{ project.tasks|length }} task{{ 's' if project.tasks|length != 1 }}
+      </div>
+    </div>
+    <button class="btn btn-sm btn-ghost text-danger" 
+            hx-post="/goals/{{ goal.id }}/unlink-project/{{ project.id }}"
+            hx-target="#linked-projects"
+            hx-swap="innerHTML"
+            hx-confirm="Unlink this project from the goal?">
+      Unlink
+    </button>
+  </div>
+  {% endfor %}
+{% else %}
+<p class="text-muted text-sm">No projects linked to this goal yet.</p>
+{% endif %}

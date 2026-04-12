@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ goal.title }}{% endblock %}
+{% block page_title %}Goal Details{% endblock %}
+{% block topbar_actions %}
+  <a href="/goals/{{ goal.id }}/edit" class="btn btn-ghost btn-sm">Edit</a>
+  <form method="post" action="/goals/{{ goal.id }}/delete"
+        hx-post="/goals/{{ goal.id }}/delete" hx-target="#main-content"
+        onsubmit="return confirm('Delete this goal?')" style="margin:0">
+    <button class="btn btn-danger btn-sm">Delete</button>
+  </form>
+{% endblock %}
+
+{% block content %}
+<div class="grid" style="grid-template-columns: 2fr 1fr; gap: 24px;">
+  <!-- Main content -->
+  <div>
+    <div class="card">
+      <div class="flex items-center gap-2 mb-3">
+        <h2 style="margin:0;font-size:1.25rem">{{ goal.title }}</h2>
+        <span class="badge badge-{{ goal.status.value }}">{{ goal.status.value }}</span>
+        {% if goal.year %}
+        <span class="badge badge-info">{{ goal.year }}</span>
+        {% endif %}
+      </div>
+      
+      {% if goal.description %}
+      <p class="text-muted">{{ goal.description }}</p>
+      {% endif %}
+      
+      <!-- Progress Section -->
+      <div class="mt-4">
+        <div class="flex justify-between items-center mb-2">
+          <div>
+            <span class="text-sm font-medium">Progress</span>
+            <span class="text-muted text-xs" style="margin-left:8px">{{ done_tasks }}/{{ total_tasks }} tasks done</span>
+          </div>
+          <span class="text-lg font-bold {% if progress_pct >= 80 %}text-success{% elif progress_pct >= 50 %}text-warning{% else %}text-muted{% endif %}">{{ progress_pct }}%</span>
+        </div>
+        <div class="progress-bar" style="height:12px">
+          <div class="progress-fill {% if progress_pct >= 80 %}bg-success{% elif progress_pct >= 50 %}bg-warning{% else %}bg-primary{% endif %}" style="width:{{ progress_pct }}%"></div>
+        </div>
+        <div class="text-muted text-xs mt-2">Calculated from tasks in linked projects. Cancelled tasks are excluded.</div>
+      </div>
+    </div>
+    
+    <!-- Linked Projects -->
+    <div class="card mt-4">
+      <div class="flex justify-between items-center mb-3">
+        <h3 style="margin:0;font-size:1rem">Linked Projects</h3>
+      </div>
+      
+      <div id="linked-projects">
+        {% include "goals/linked_projects.html" %}
+      </div>
+      
+      <!-- Add project dropdown -->
+      <form class="flex gap-2 mt-3" hx-post="/goals/{{ goal.id }}/link-project" hx-target="#linked-projects" hx-swap="innerHTML">
+        <select name="project_id" style="flex:1">
+          <option value="">Select a project to link...</option>
+          {% set linked_ids = goal.projects|map(attribute='id')|list %}
+          {% for p in all_projects if p.id not in linked_ids %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-primary">Link</button>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Sidebar -->
+  <div>
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:1rem">Details</h3>
+      <dl style="margin:0">
+        <dt class="text-muted text-sm">Status</dt>
+        <dd class="mb-3"><span class="badge badge-{{ goal.status.value }}">{{ goal.status.value }}</span></dd>
+        
+        {% if goal.year %}
+        <dt class="text-muted text-sm">Year</dt>
+        <dd class="mb-3">{{ goal.year }}</dd>
+        {% endif %}
+        
+        {% if goal.target_date %}
+        <dt class="text-muted text-sm">Target Date</dt>
+        <dd class="mb-3">{{ goal.target_date.strftime('%B %d, %Y') }}</dd>
+        {% endif %}
+        
+        <dt class="text-muted text-sm">Created</dt>
+        <dd class="mb-3">{{ goal.created_at.strftime('%b %d, %Y') }}</dd>
+        
+        <dt class="text-muted text-sm">Updated</dt>
+        <dd>{{ goal.updated_at.strftime('%b %d, %Y') }}</dd>
+      </dl>
+    </div>
+    
+    <!-- Project Epics Summary -->
+    {% if goal.projects %}
+    <div class="card mt-4">
+      <h3 style="margin:0 0 12px;font-size:1rem">Epics</h3>
+      {% set has_epics = false %}
+      {% for project in goal.projects %}
+        {% for epic in project.epics %}
+          {% set has_epics = true %}
+          <div class="flex justify-between items-center mb-2 p-2" style="background:var(--surface);border-radius:6px">
+            <div>
+              <a href="{{ epic.jira_url }}" target="_blank" class="text-sm font-medium" style="color:var(--primary)">{{ epic.key }}</a>
+              <div class="text-muted text-xs">{{ epic.title[:40] }}{% if epic.title|length > 40 %}...{% endif %}</div>
+            </div>
+            <span class="badge badge-sm">{{ epic.status }}</span>
+          </div>
+        {% endfor %}
+      {% endfor %}
+      {% if not has_epics %}
+      <p class="text-muted text-sm">No epics linked yet.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

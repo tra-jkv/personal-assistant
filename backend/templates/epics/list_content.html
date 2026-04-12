@@ -1,0 +1,142 @@
+<!-- Epics Kanban Board - HTMX partial -->
+<div class="filters-bar">
+  <div class="flex gap-3 items-center">
+    <div class="filter-tabs">
+      <a href="/epics/" class="filter-tab {% if not filter %}active{% endif %}">All</a>
+      <a href="/epics/?filter=assigned" class="filter-tab {% if filter == 'assigned' %}active{% endif %}">Assigned</a>
+      <a href="/epics/?filter=unassigned" class="filter-tab {% if filter == 'unassigned' %}active{% endif %}">Unassigned</a>
+    </div>
+    <label class="toggle-label">
+      <input type="checkbox" id="hide-empty-epics" onchange="applyEpicFilters()">
+      <span>Hide epics with no stories</span>
+    </label>
+    <label class="toggle-label">
+      <input type="checkbox" id="goal-alignment-view" onchange="applyEpicFilters()">
+      <span>Goal alignment view</span>
+    </label>
+  </div>
+  <div class="stats-row">
+    <span class="stat-item"><span class="stat-value">{{ total_epics }}</span> epics</span>
+    <span class="stat-item text-blue"><span class="stat-value">{{ in_progress_epics }}</span> in dev</span>
+    <span class="stat-item text-green"><span class="stat-value">{{ done_epics }}</span> done</span>
+    <span class="stat-item text-muted"><span class="stat-value">{{ unassigned_epics }}</span> unassigned</span>
+  </div>
+</div>
+
+<!-- Normal kanban view -->
+<div class="kanban-board kanban-5-col" id="epics-kanban">
+  {% for col in columns %}
+  <div class="kanban-column" data-status="{{ col.key }}">
+    <div class="kanban-column-header {% if col.key == 'done' %}done{% elif col.key == 'in_development' %}in-progress{% endif %}">
+      <h3>{{ col.label }}</h3>
+      <span class="badge badge-sm">{{ epics_by_status[col.key]|length }}</span>
+    </div>
+    <div class="kanban-cards">
+      {% for epic in epics_by_status[col.key] %}
+      {% include "epics/epic_card.html" %}
+      {% endfor %}
+      {% if not epics_by_status[col.key] and total_epics == 0 and loop.first %}
+      <div class="empty-state" style="padding:32px 16px">
+        <div class="icon">⚡</div>
+        <h3>No epics yet</h3>
+        <p>Sync your Jira data to populate epics here.</p>
+        <div class="empty-action">
+          <a href="/reports/" class="btn btn-primary btn-sm">Sync now</a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Goal alignment view (hidden by default) -->
+<div id="goal-alignment-board" style="display:none">
+  <div class="alignment-section">
+    <div class="alignment-section-header alignment-has-goal">
+      <h3>&#x2714; Aligned to a Goal</h3>
+      <span class="badge badge-sm badge-success" id="goal-count">0</span>
+    </div>
+    <div class="alignment-cards" id="aligned-cards"></div>
+  </div>
+  <div class="alignment-section">
+    <div class="alignment-section-header alignment-no-goal">
+      <h3>&#x25CB; No Goal</h3>
+      <span class="badge badge-sm" id="no-goal-count">0</span>
+    </div>
+    <div class="alignment-cards" id="unaligned-cards"></div>
+  </div>
+</div>
+
+<script>
+function applyEpicFilters() {
+  const hideEmpty = document.getElementById('hide-empty-epics')?.checked || false;
+  const goalView = document.getElementById('goal-alignment-view')?.checked || false;
+
+  localStorage.setItem('hideEmptyEpics', hideEmpty);
+  localStorage.setItem('goalAlignmentView', goalView);
+
+  const kanban = document.getElementById('epics-kanban');
+  const alignBoard = document.getElementById('goal-alignment-board');
+
+  if (goalView) {
+    // Switch to alignment view
+    kanban.style.display = 'none';
+    alignBoard.style.display = '';
+
+    const alignedEl = document.getElementById('aligned-cards');
+    const unalignedEl = document.getElementById('unaligned-cards');
+    alignedEl.innerHTML = '';
+    unalignedEl.innerHTML = '';
+
+    let alignedCount = 0, unalignedCount = 0;
+
+    // Collect all epic cards from the kanban (clone so original stays intact)
+    document.querySelectorAll('#epics-kanban .epic-card').forEach(card => {
+      const hasStories = card.dataset.hasStories === 'true';
+      if (hideEmpty && !hasStories) return; // respect the other filter
+      const hasGoal = card.dataset.hasGoal === 'true';
+      const clone = card.cloneNode(true);
+      clone.style.display = '';
+      if (hasGoal) {
+        alignedEl.appendChild(clone);
+        alignedCount++;
+      } else {
+        unalignedEl.appendChild(clone);
+        unalignedCount++;
+      }
+    });
+
+    document.getElementById('goal-count').textContent = alignedCount;
+    document.getElementById('no-goal-count').textContent = unalignedCount;
+  } else {
+    // Back to normal kanban
+    kanban.style.display = '';
+    alignBoard.style.display = 'none';
+
+    // Apply hide-empty filter to kanban cards
+    document.querySelectorAll('#epics-kanban .epic-card').forEach(card => {
+      const hasStories = card.dataset.hasStories === 'true';
+      card.style.display = (hideEmpty && !hasStories) ? 'none' : '';
+    });
+
+    // Update column counts
+    document.querySelectorAll('#epics-kanban .kanban-column').forEach(col => {
+      const visible = col.querySelectorAll('.epic-card:not([style*="display: none"]):not([style*="display:none"])').length;
+      const badge = col.querySelector('.badge-sm');
+      if (badge) badge.textContent = visible;
+    });
+  }
+}
+
+// Restore preferences after HTMX swap
+(function() {
+  const hideEmpty = localStorage.getItem('hideEmptyEpics') === 'true';
+  const goalView = localStorage.getItem('goalAlignmentView') === 'true';
+  const cbEmpty = document.getElementById('hide-empty-epics');
+  const cbGoal = document.getElementById('goal-alignment-view');
+  if (cbEmpty) cbEmpty.checked = hideEmpty;
+  if (cbGoal) cbGoal.checked = goalView;
+  if (hideEmpty || goalView) applyEpicFilters();
+})();
+</script>

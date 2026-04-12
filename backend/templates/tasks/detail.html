@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+{% block title %}{{ task.jira_key or 'Task' }} - {{ task.title }}{% endblock %}
+{% block page_title %}Story Details{% endblock %}
+{% block topbar_actions %}
+  <a href="/tasks/" class="btn btn-ghost btn-sm">Back to Tasks</a>
+  {% if task.epic %}
+  <a href="/epics/{{ task.epic.key }}" class="btn btn-ghost btn-sm">View Epic</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="grid" style="grid-template-columns: 2fr 1fr; gap: 24px;">
+  <!-- Main content -->
+  <div>
+    <div class="card">
+      <div class="flex items-center gap-2 mb-3">
+        {% if task.jira_key %}
+        <a href="{{ task.jira_url }}" target="_blank" class="story-key-lg">{{ task.jira_key }}</a>
+        {% else %}
+        <span class="story-key-lg local">LOCAL-{{ task.id }}</span>
+        {% endif %}
+        <span class="badge badge-{{ task.status|lower|replace(' ', '-') }}">{{ task.status }}</span>
+        <span class="badge badge-{{ task.priority.value if task.priority else 'medium' }}">
+          {{ task.priority.value if task.priority else 'medium' }}
+        </span>
+      </div>
+      
+      <h2 style="margin:0 0 16px;font-size:1.25rem">{{ task.title }}</h2>
+      
+      {% if task.description %}
+      <div class="description">
+        <p>{{ task.description }}</p>
+      </div>
+      {% endif %}
+      
+      <!-- Progress Section (Subtasks) -->
+      {% if total_subtasks > 0 %}
+      <div class="progress-section mt-4">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sm font-medium">Subtasks Progress</span>
+          <span class="text-lg font-bold {% if done_subtasks == total_subtasks %}text-success{% elif done_subtasks > 0 %}text-warning{% else %}text-muted{% endif %}">
+            {{ done_subtasks }}/{{ total_subtasks }}
+          </span>
+        </div>
+        <div class="progress-bar" style="height:12px">
+          {% set progress = (done_subtasks / total_subtasks * 100)|round if total_subtasks > 0 else 0 %}
+          <div class="progress-fill {% if progress == 100 %}bg-success{% elif progress >= 50 %}bg-warning{% else %}bg-primary{% endif %}" 
+               style="width:{{ progress }}%"></div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    
+    <!-- Subtasks Kanban -->
+    {% if subtasks %}
+    <div class="card mt-4">
+      <h3 style="margin:0 0 16px;font-size:1rem">Subtasks ({{ total_subtasks }})</h3>
+      
+      <div class="subtasks-kanban">
+        <!-- To Do Column -->
+        <div class="subtask-col">
+          <div class="subtask-col-header">
+            <span>To Do</span>
+            <span class="count">{{ subtasks_by_status.todo|length }}</span>
+          </div>
+          <div class="subtask-cards">
+            {% for st in subtasks_by_status.todo %}
+            <div class="subtask-card" id="subtask-{{ st.key }}">
+              <div class="subtask-header">
+                <a href="{{ jira_server }}/browse/{{ st.key }}" target="_blank" class="subtask-key">{{ st.key }}</a>
+                <select class="subtask-status-select" onchange="transitionSubtask('{{ task.id }}', '{{ st.key }}', this.value, this)">
+                  <option value="">Move to...</option>
+                  <option value="In Development">In Development</option>
+                  <option value="Done">Done</option>
+                </select>
+              </div>
+              <div class="subtask-title">{{ st.title }}</div>
+              {% if st.assignee %}
+              <div class="subtask-assignee">{{ st.assignee }}</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        
+        <!-- In Progress Column -->
+        <div class="subtask-col">
+          <div class="subtask-col-header in-progress">
+            <span>In Progress</span>
+            <span class="count">{{ subtasks_by_status.in_progress|length }}</span>
+          </div>
+          <div class="subtask-cards">
+            {% for st in subtasks_by_status.in_progress %}
+            <div class="subtask-card" id="subtask-{{ st.key }}">
+              <div class="subtask-header">
+                <a href="{{ jira_server }}/browse/{{ st.key }}" target="_blank" class="subtask-key">{{ st.key }}</a>
+                <select class="subtask-status-select" onchange="transitionSubtask('{{ task.id }}', '{{ st.key }}', this.value, this)">
+                  <option value="">Move to...</option>
+                  <option value="Ready To Develop">To Do</option>
+                  <option value="In Review">In Review</option>
+                  <option value="Done">Done</option>
+                </select>
+              </div>
+              <div class="subtask-title">{{ st.title }}</div>
+              {% if st.assignee %}
+              <div class="subtask-assignee">{{ st.assignee }}</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        
+        <!-- Done Column -->
+        <div class="subtask-col">
+          <div class="subtask-col-header done">
+            <span>Done</span>
+            <span class="count">{{ subtasks_by_status.done|length }}</span>
+          </div>
+          <div class="subtask-cards">
+            {% for st in subtasks_by_status.done %}
+            <div class="subtask-card done" id="subtask-{{ st.key }}">
+              <div class="subtask-header">
+                <a href="{{ jira_server }}/browse/{{ st.key }}" target="_blank" class="subtask-key">{{ st.key }}</a>
+                <select class="subtask-status-select" onchange="transitionSubtask('{{ task.id }}', '{{ st.key }}', this.value, this)">
+                  <option value="">Reopen...</option>
+                  <option value="Ready To Develop">To Do</option>
+                  <option value="In Development">In Development</option>
+                </select>
+              </div>
+              <div class="subtask-title">{{ st.title }}</div>
+              {% if st.assignee %}
+              <div class="subtask-assignee">{{ st.assignee }}</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        
+        <!-- Cancelled Column (only show if there are cancelled subtasks) -->
+        {% if subtasks_by_status.cancelled %}
+        <div class="subtask-col">
+          <div class="subtask-col-header cancelled">
+            <span>Cancelled</span>
+            <span class="count">{{ subtasks_by_status.cancelled|length }}</span>
+          </div>
+          <div class="subtask-cards">
+            {% for st in subtasks_by_status.cancelled %}
+            <div class="subtask-card cancelled" id="subtask-{{ st.key }}">
+              <div class="subtask-header">
+                <a href="{{ jira_server }}/browse/{{ st.key }}" target="_blank" class="subtask-key">{{ st.key }}</a>
+                <select class="subtask-status-select" onchange="transitionSubtask('{{ task.id }}', '{{ st.key }}', this.value, this)">
+                  <option value="">Reopen...</option>
+                  <option value="Ready To Develop">To Do</option>
+                </select>
+              </div>
+              <div class="subtask-title">{{ st.title }}</div>
+              {% if st.assignee %}
+              <div class="subtask-assignee">{{ st.assignee }}</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="card mt-4">
+      <p class="text-muted">No subtasks for this story.</p>
+    </div>
+    {% endif %}
+  </div>
+  
+  <!-- Sidebar -->
+  <div>
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:1rem">Details</h3>
+      <dl style="margin:0">
+        <dt class="text-muted text-sm">Status</dt>
+        <dd class="mb-3"><span class="badge">{{ task.status }}</span></dd>
+        
+        <dt class="text-muted text-sm">Assignee</dt>
+        <dd class="mb-3">{{ task.assignee or 'Unassigned' }}</dd>
+        
+        {% if task.due_date %}
+        <dt class="text-muted text-sm">Due Date</dt>
+        <dd class="mb-3">{{ task.due_date.strftime('%b %d, %Y') }}</dd>
+        {% endif %}
+        
+        {% if task.sprint_name %}
+        <dt class="text-muted text-sm">Sprint</dt>
+        <dd class="mb-3">{{ task.sprint_name }}</dd>
+        {% endif %}
+        
+        {% if task.jira_key %}
+        <dt class="text-muted text-sm">Jira Link</dt>
+        <dd class="mb-3"><a href="{{ task.jira_url }}" target="_blank">Open in Jira</a></dd>
+        {% endif %}
+        
+        {% if task.last_synced %}
+        <dt class="text-muted text-sm">Last Synced</dt>
+        <dd class="mb-3">{{ task.last_synced.strftime('%b %d, %Y %H:%M') }}</dd>
+        {% endif %}
+      </dl>
+    </div>
+    
+    <!-- Linked Epic -->
+    {% if task.epic %}
+    <div class="card mt-4">
+      <h3 style="margin:0 0 12px;font-size:1rem">Parent Epic</h3>
+      <a href="/epics/{{ task.epic.key }}" class="epic-link">
+        <span class="epic-key">{{ task.epic.key }}</span>
+        <span class="epic-title">{{ task.epic.title }}</span>
+      </a>
+    </div>
+    {% endif %}
+    
+    <!-- Linked Project -->
+    {% if task.project %}
+    <div class="card mt-4">
+      <h3 style="margin:0 0 12px;font-size:1rem">Project</h3>
+      <a href="/projects/{{ task.project.id }}" class="project-link">
+        {{ task.project.name }}
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+.story-key-lg {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #4c9aff;
+  background: #0d2e52;
+  border: 1px solid #1e4a80;
+  border-radius: 4px;
+  padding: 4px 10px;
+  text-decoration: none;
+}
+
+.story-key-lg:hover {
+  background: #1e4a80;
+}
+
+.story-key-lg.local {
+  color: var(--muted);
+  background: var(--surface2);
+  border-color: var(--border);
+}
+
+.progress-section {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.description {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* Subtasks Kanban */
+.subtasks-kanban {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.subtask-col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 200px;
+}
+
+.subtask-col-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: var(--surface2);
+}
+
+.subtask-col-header.in-progress {
+  background: rgba(76, 154, 255, 0.1);
+  border-bottom-color: rgba(76, 154, 255, 0.3);
+}
+
+.subtask-col-header.done {
+  background: rgba(34, 197, 94, 0.1);
+  border-bottom-color: rgba(34, 197, 94, 0.3);
+}
+
+.subtask-col-header.cancelled {
+  background: rgba(107, 114, 128, 0.1);
+  border-bottom-color: rgba(107, 114, 128, 0.3);
+}
+
+.subtask-col-header .count {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.subtask-cards {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subtask-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.subtask-card.done {
+  opacity: 0.7;
+}
+
+.subtask-card.cancelled {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.subtask-card.cancelled .subtask-title {
+  text-decoration: line-through;
+}
+
+.subtask-key {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #4c9aff;
+  background: #0d2e52;
+  border: 1px solid #1e4a80;
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-decoration: none;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.subtask-key:hover {
+  background: #1e4a80;
+}
+
+.subtask-title {
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.subtask-assignee {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.subtask-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.subtask-status-select {
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.subtask-status-select:hover {
+  border-color: var(--primary);
+}
+
+.subtask-card.updating {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Epic link */
+.epic-link {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+  padding: 12px;
+  background: var(--surface2);
+  border-radius: var(--radius);
+  transition: background 0.15s;
+}
+
+.epic-link:hover {
+  background: var(--surface);
+}
+
+.epic-link .epic-key {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #4c9aff;
+  background: #0d2e52;
+  border: 1px solid #1e4a80;
+  border-radius: 3px;
+  padding: 2px 6px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.epic-link .epic-title {
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.project-link {
+  display: block;
+  padding: 12px;
+  background: var(--surface2);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+  transition: background 0.15s;
+}
+
+.project-link:hover {
+  background: var(--surface);
+}
+</style>
+
+<script>
+async function transitionSubtask(taskId, subtaskKey, targetStatus, selectElement) {
+  if (!targetStatus) return;
+  
+  const card = document.getElementById('subtask-' + subtaskKey);
+  if (card) card.classList.add('updating');
+  
+  try {
+    const response = await fetch(`/tasks/${taskId}/subtask/${subtaskKey}/transition`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: targetStatus })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // Reload the page to show updated status
+      window.location.reload();
+    } else {
+      alert('Failed to update: ' + (result.error || 'Unknown error'));
+      selectElement.value = '';
+      if (card) card.classList.remove('updating');
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+    selectElement.value = '';
+    if (card) card.classList.remove('updating');
+  }
+}
+</script>
+{% endblock %}

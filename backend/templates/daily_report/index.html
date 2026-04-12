@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Daily Report{% endblock %}
+{% block page_title %}Daily Report{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/standup/" class="btn btn-ghost btn-sm">Old Standup Logs</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Configuration Check -->
+{% if not github_configured and not jira_configured %}
+<div class="card" style="margin-bottom:24px;background:var(--surface2);border-left:4px solid var(--yellow)">
+  <h3 style="margin:0 0 12px 0;color:var(--yellow)">⚙️ Setup Required</h3>
+  <p style="margin-bottom:12px">To enable automatic daily reports, configure GitHub and/or Jira integration:</p>
+  <ol style="margin-left:20px;line-height:1.8">
+    <li>Read <a href="/static/DAILY_REPORT_SETUP.md" style="color:var(--accent-h)">DAILY_REPORT_SETUP.md</a></li>
+    <li>Get your GitHub personal access token</li>
+    <li>Get your Jira API credentials</li>
+    <li>Add to <code>.env</code> file</li>
+    <li>Restart the app</li>
+  </ol>
+</div>
+{% endif %}
+
+<!-- Sync Status Cards -->
+<div class="grid grid-2" style="margin-bottom:24px">
+  <!-- GitHub Status -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📦 GitHub</span>
+      {% if github_configured %}
+      <span class="badge badge-low" style="background:var(--green)">Configured</span>
+      {% else %}
+      <span class="badge badge-critical">Not Configured</span>
+      {% endif %}
+    </div>
+    
+    {% if github_configured %}
+    <div style="padding:16px 0">
+      <div style="font-size:1.1rem;margin-bottom:8px">{{ github_info.status }}</div>
+      <div class="text-muted text-sm">
+        {% if github_info.last_sync %}
+        Last synced: {{ github_info.last_sync }}<br>
+        Total syncs: {{ github_info.total_syncs }}
+        {% else %}
+        Never synced yet
+        {% endif %}
+      </div>
+      {% if github_info.error %}
+      <div style="color:var(--red);margin-top:12px;font-size:.85rem">
+        Error: {{ github_info.error }}
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="text-muted text-sm">Add GITHUB_TOKEN to .env file</p>
+    {% endif %}
+  </div>
+
+  <!-- Jira Status -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🎯 Jira</span>
+      {% if jira_configured %}
+      <span class="badge badge-low" style="background:var(--green)">Configured</span>
+      {% else %}
+      <span class="badge badge-critical">Not Configured</span>
+      {% endif %}
+    </div>
+    
+    {% if jira_configured %}
+    <div style="padding:16px 0">
+      <div style="font-size:1.1rem;margin-bottom:8px">{{ jira_info.status }}</div>
+      <div class="text-muted text-sm">
+        {% if jira_info.last_sync %}
+        Last synced: {{ jira_info.last_sync }}<br>
+        Total syncs: {{ jira_info.total_syncs }}
+        {% else %}
+        Never synced yet
+        {% endif %}
+      </div>
+      {% if jira_info.error %}
+      <div style="color:var(--red);margin-top:12px;font-size:.85rem">
+        Error: {{ jira_info.error }}
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="text-muted text-sm">Add JIRA_SERVER, JIRA_EMAIL, JIRA_API_TOKEN to .env file</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Sync Actions -->
+{% if github_configured or jira_configured %}
+<div class="card" style="margin-bottom:24px">
+  <form method="post" action="/daily-report/sync"
+        hx-post="/daily-report/sync"
+        hx-target="#report-content"
+        hx-swap="innerHTML"
+        hx-indicator="#sync-spinner">
+    <div class="flex gap-2" style="align-items:center">
+      <button type="submit" class="btn btn-primary">
+        🔄 Sync Now
+      </button>
+      <button type="submit" name="force_full" value="true" class="btn btn-ghost">
+        Force Full Sync (Last 7 Days)
+      </button>
+      <div id="sync-spinner" class="htmx-indicator" style="margin-left:12px">
+        <div class="spinner"></div>
+        Syncing...
+      </div>
+    </div>
+  </form>
+  <p class="text-muted text-sm" style="margin-top:12px">
+    Click "Sync Now" to fetch new activity since last sync (incremental).<br>
+    Use "Force Full Sync" to re-fetch all activity from the last 7 days.
+  </p>
+</div>
+
+<!-- Report Content (will be populated by HTMX or show existing data) -->
+<div id="report-content">
+  {% if report %}
+    {% include "daily_report/report_content.html" %}
+  {% else %}
+  <div class="card">
+    <p class="text-muted">Click "Sync Now" to generate your daily report</p>
+  </div>
+  {% endif %}
+</div>
+
+{% else %}
+
+<!-- No Configuration -->
+<div class="card">
+  <h3 style="margin-top:0">Get Started</h3>
+  <p>Configure at least one integration (GitHub or Jira) to start using Daily Reports.</p>
+  <p class="text-muted text-sm" style="margin-top:16px">
+    See <strong>DAILY_REPORT_SETUP.md</strong> in the project root for step-by-step instructions.
+  </p>
+</div>
+
+{% endif %}
+
+<style>
+.spinner {
+  border: 3px solid var(--surface2);
+  border-top: 3px solid var(--accent-h);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.htmx-indicator {
+  display: none;
+}
+
+.htmx-request .htmx-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+</style>
+
+{% endblock %}

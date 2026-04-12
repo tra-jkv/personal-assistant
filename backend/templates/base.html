@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Engineering Hub{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-brand-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    </div>
+    <div class="sidebar-brand-text">
+      <div class="sidebar-brand-name">Engineering Hub</div>
+      <div class="sidebar-brand-sub">Personal Assistant</div>
+    </div>
+  </div>
+
+  <nav>
+    <div class="nav-section-label"><span>Workspace</span></div>
+
+    <a href="/" class="nav-item {% if request.url.path == '/' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="/goals/" class="nav-item {% if '/goals' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      <span>Goals</span>
+    </a>
+    <a href="/projects/" class="nav-item {% if '/projects' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 7l10-5 10 5v10l-10 5L2 17z"/></svg>
+      <span>Projects</span>
+    </a>
+    <a href="/epics/" class="nav-item {% if '/epics' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      <span>Epics</span>
+    </a>
+    <a href="/tasks/" class="nav-item {% if '/tasks' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>
+      <span>Tasks</span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label"><span>Tools</span></div>
+
+    <a href="/notes/" class="nav-item {% if '/notes' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span>Notes</span>
+    </a>
+    <a href="/reminders/" class="nav-item {% if '/reminders' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span>Reminders</span>
+    </a>
+    <a href="/meetings/" class="nav-item {% if '/meetings' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Meetings</span>
+    </a>
+    <a href="/reports/" class="nav-item {% if '/reports' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span>Reports</span>
+    </a>
+    <a href="/links/" class="nav-item {% if '/links' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <span>Links</span>
+    </a>
+    <a href="/ai/" class="nav-item {% if '/ai' in request.url.path %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 8v4l3 3"/><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"/></svg>
+      <span>AI Assistant</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="sidebar-toggle-icon"><path d="M15 18l-6-6 6-6"/></svg>
+    <span>Collapse</span>
+  </div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1 id="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+    </div>
+    <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+  </div>
+  <div class="content" id="main-content">
+    {% block content %}{% endblock %}
+  </div>
+</div>
+
+<script>
+function toggleSidebar() {
+  const collapsed = document.body.classList.toggle('sidebar-collapsed');
+  localStorage.setItem('sidebarCollapsed', collapsed);
+  const icon = document.getElementById('sidebar-toggle-icon');
+  if (icon) icon.innerHTML = collapsed
+    ? '<path d="M9 18l6-6-6-6"/>'
+    : '<path d="M15 18l-6-6 6-6"/>';
+}
+
+// Restore sidebar state
+(function() {
+  if (localStorage.getItem('sidebarCollapsed') === 'true') {
+    document.body.classList.add('sidebar-collapsed');
+    const icon = document.getElementById('sidebar-toggle-icon');
+    if (icon) icon.innerHTML = '<path d="M9 18l6-6-6-6"/>';
+  }
+})();
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

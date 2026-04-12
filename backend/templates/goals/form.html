@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{% if goal %}Edit Goal{% else %}New Goal{% endif %}{% endblock %}
+{% block page_title %}{% if goal %}Edit Goal{% else %}New Goal{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:640px">
+  <form method="post" action="{% if goal %}/goals/{{ goal.id }}/edit{% else %}/goals/new{% endif %}"
+        hx-post="{% if goal %}/goals/{{ goal.id }}/edit{% else %}/goals/new{% endif %}" hx-target="#main-content" hx-swap="innerHTML">
+    <div class="form-group">
+      <label>Goal Title *</label>
+      <input type="text" name="title" required autofocus 
+             placeholder="e.g. Improve Data Pipeline Reliability" 
+             value="{{ goal.title if goal else '' }}" />
+    </div>
+    
+    <div class="form-group">
+      <label>Description</label>
+      <textarea name="description" rows="3" placeholder="What do you want to achieve?">{{ goal.description if goal else '' }}</textarea>
+    </div>
+    
+    <div class="grid grid-2">
+      <div class="form-group">
+        <label>Year</label>
+        <select name="year">
+          {% set year_options = [2024, 2025, 2026, 2027, 2028] %}
+          {% for y in year_options %}
+          <option value="{{ y }}" {% if (goal and goal.year == y) or (not goal and y == current_year) %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Target Date</label>
+        <input type="date" name="target_date" value="{{ goal.target_date.isoformat() if goal and goal.target_date else '' }}" />
+      </div>
+    </div>
+    
+    <div class="grid grid-2">
+      <div class="form-group">
+        <label>Status</label>
+        <select name="status">
+          {% for s in statuses %}
+          <option value="{{ s.value }}" {% if goal and goal.status.value == s.value %}selected{% endif %}>{{ s.value|capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Progress (%)</label>
+        <input type="number" name="progress_pct" min="0" max="100" value="{{ goal.progress_pct if goal else 0 }}" />
+      </div>
+    </div>
+    
+    <div class="form-group">
+      <label>Link Projects</label>
+      <div class="checkbox-group" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px">
+        {% if projects %}
+          {% set linked_ids = goal.projects|map(attribute='id')|list if goal else [] %}
+          {% for p in projects %}
+          <label class="checkbox-label">
+            <input type="checkbox" name="project_ids" value="{{ p.id }}" {% if p.id in linked_ids %}checked{% endif %} />
+            <span>{{ p.name }}</span>
+            <span class="badge badge-{{ p.status.value }} ml-2">{{ p.status.value }}</span>
+          </label>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted">No projects available. <a href="/projects/new">Create a project</a> first.</p>
+        {% endif %}
+      </div>
+    </div>
+    
+    <div class="flex gap-2 mt-4">
+      <button type="submit" class="btn btn-primary">{% if goal %}Update Goal{% else %}Create Goal{% endif %}</button>
+      <a href="{% if goal %}/goals/{{ goal.id }}{% else %}/goals/{% endif %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

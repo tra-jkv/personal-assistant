@@ -1,0 +1,31 @@
+{% if project.goals %}
+  {% for goal in project.goals %}
+  <div class="flex justify-between items-center p-3 mb-2" style="background:var(--surface2);border-radius:8px">
+    <div>
+      <a href="/goals/{{ goal.id }}" style="color:var(--text);text-decoration:none;font-weight:500">{{ goal.title }}</a>
+      <div class="flex gap-2 mt-1">
+        <span class="badge badge-{{ goal.status.value }}">{{ goal.status.value }}</span>
+        {% if goal.quarter %}
+        <span class="badge badge-info">{{ goal.quarter }}</span>
+        {% endif %}
+      </div>
+      <!-- Progress -->
+      <div class="flex items-center gap-2 mt-2">
+        <div class="progress-bar" style="width:100px;height:6px">
+          <div class="progress-fill {% if goal.progress_pct >= 80 %}bg-success{% elif goal.progress_pct >= 50 %}bg-warning{% else %}bg-primary{% endif %}" style="width:{{ goal.progress_pct }}%"></div>
+        </div>
+        <span class="text-muted text-xs">{{ goal.progress_pct }}%</span>
+      </div>
+    </div>
+    <button class="btn btn-sm btn-ghost text-danger" 
+            hx-post="/projects/{{ project.id }}/unlink-goal/{{ goal.id }}"
+            hx-target="#linked-goals"
+            hx-swap="innerHTML"
+            hx-confirm="Unlink this goal from the project?">
+      Unlink
+    </button>
+  </div>
+  {% endfor %}
+{% else %}
+<p class="text-muted text-sm">No goals linked yet. Link goals to track how this project contributes to your objectives.</p>
+{% endif %}

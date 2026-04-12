@@ -1,0 +1,162 @@
+<!-- HTMX partial: reminders list content only (no base layout) -->
+
+<!-- Filter & Sort Bar -->
+<div class="filter-bar" style="margin-bottom:16px">
+  <div class="flex gap-3 items-center flex-wrap">
+    <div class="form-group" style="margin:0;min-width:150px">
+      <select name="goal_id"
+              hx-get="/reminders/"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              hx-include="[name='project_id'],[name='sort_by']">
+        <option value="">All Goals</option>
+        {% for g in goals %}
+        <option value="{{ g.id }}" {{ 'selected' if active_goal_id == g.id }}>{{ g.title[:30] }}{% if g.title|length > 30 %}...{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;min-width:150px">
+      <select name="project_id" 
+              hx-get="/reminders/" 
+              hx-target="#main-content" 
+              hx-swap="innerHTML"
+              hx-include="[name='goal_id'],[name='sort_by']">
+        <option value="">All Projects</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}" {{ 'selected' if active_project_id == p.id }}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="flex gap-2 items-center" style="margin-left:auto">
+      <span class="text-muted text-sm">Sort:</span>
+      <div class="btn-group">
+        <a href="/reminders/?sort_by=due_date{% if active_project_id %}&project_id={{ active_project_id }}{% endif %}{% if active_goal_id %}&goal_id={{ active_goal_id }}{% endif %}"
+           class="btn btn-sm {{ 'btn-primary' if sort_by == 'due_date' else 'btn-ghost' }}"
+           hx-get="/reminders/?sort_by=due_date{% if active_project_id %}&project_id={{ active_project_id }}{% endif %}{% if active_goal_id %}&goal_id={{ active_goal_id }}{% endif %}"
+           hx-target="#main-content"
+           hx-swap="innerHTML">Due Date</a>
+        <a href="/reminders/?sort_by=priority{% if active_project_id %}&project_id={{ active_project_id }}{% endif %}{% if active_goal_id %}&goal_id={{ active_goal_id }}{% endif %}"
+           class="btn btn-sm {{ 'btn-primary' if sort_by == 'priority' else 'btn-ghost' }}"
+           hx-get="/reminders/?sort_by=priority{% if active_project_id %}&project_id={{ active_project_id }}{% endif %}{% if active_goal_id %}&goal_id={{ active_goal_id }}{% endif %}"
+           hx-target="#main-content"
+           hx-swap="innerHTML">Priority</a>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('add-reminder-form').classList.toggle('hidden')">
+        + Add Reminder
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- New reminder form (hidden by default) -->
+<div id="add-reminder-form" class="card hidden" style="margin-bottom:16px">
+  <div class="card-header">
+    <span class="card-title">Add Reminder</span>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('add-reminder-form').classList.add('hidden')">&times;</button>
+  </div>
+  <form method="post" action="/reminders/new"
+        hx-post="/reminders/new" hx-target="#main-content" hx-swap="innerHTML">
+    <div class="grid grid-2">
+      <div class="form-group">
+        <label>Title *</label>
+        <input type="text" name="title" required placeholder="Reminder title" />
+      </div>
+      <div class="form-group">
+        <label>Due date & time *</label>
+        <input type="datetime-local" name="due_at" required />
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select name="priority">
+          {% for p in priorities %}
+          <option value="{{ p.value }}" {{ 'selected' if p.value == 'medium' }}>{{ p.value|capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Project</label>
+        <select name="project_id">
+          <option value="">— None —</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {{ 'selected' if active_project_id == p.id }}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <input type="text" name="description" placeholder="Optional details" />
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-primary">Add Reminder</button>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-reminder-form').classList.add('hidden')">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<!-- List -->
+{% set open = reminders | selectattr('is_done', 'equalto', false) | list %}
+{% set done = reminders | selectattr('is_done', 'equalto', true) | list %}
+
+{% if open %}
+<div class="card">
+  <div class="card-header"><span class="card-title">Open ({{ open|length }})</span></div>
+  <ul class="item-list">
+    {% for r in open %}
+    <li>
+      <form method="post" action="/reminders/{{ r.id }}/toggle"
+            hx-post="/reminders/{{ r.id }}/toggle" hx-target="#main-content" hx-swap="innerHTML">
+        <button type="submit" class="check-btn" title="Mark done"></button>
+      </form>
+      <div style="flex:1">
+        <div class="fw-600">{{ r.title }}</div>
+        {% if r.description %}<div class="text-muted text-sm mt-2">{{ r.description }}</div>{% endif %}
+        <div class="text-muted text-sm mt-2">
+          Due: <span class="{{ 'overdue' if r.due_at < now else ('due-soon' if (r.due_at - now).total_seconds() < 86400 else '') }}">
+            {{ r.due_at.strftime('%b %d, %Y %H:%M') }}
+          </span>
+          {% if r.project %} &nbsp;·&nbsp; <a href="/projects/{{ r.project.id }}" class="text-muted">{{ r.project.name }}</a>{% endif %}
+        </div>
+      </div>
+      <div class="flex gap-2 items-center" style="flex-shrink:0">
+        <span class="badge badge-{{ r.priority.value }}">{{ r.priority.value }}</span>
+        <form method="post" action="/reminders/{{ r.id }}/delete"
+              hx-post="/reminders/{{ r.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+              onsubmit="return confirm('Delete reminder?')">
+          <button class="btn btn-danger btn-sm">Del</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% elif not done %}
+<div class="empty-state">
+  <div class="icon">🔔</div>
+  <p>No reminders{% if active_project_id or active_goal_id %} matching filter{% endif %}.</p>
+</div>
+{% endif %}
+
+{% if done %}
+<div class="card" style="margin-top:16px;opacity:.6">
+  <div class="card-header"><span class="card-title text-muted">Done ({{ done|length }})</span></div>
+  <ul class="item-list">
+    {% for r in done %}
+    <li>
+      <form method="post" action="/reminders/{{ r.id }}/toggle"
+            hx-post="/reminders/{{ r.id }}/toggle" hx-target="#main-content" hx-swap="innerHTML">
+        <button type="submit" class="check-btn done" title="Unmark"></button>
+      </form>
+      <div style="flex:1">
+        <div class="done-text">{{ r.title }}</div>
+        {% if r.project %}<div class="text-muted text-sm mt-2">{{ r.project.name }}</div>{% endif %}
+      </div>
+      <form method="post" action="/reminders/{{ r.id }}/delete"
+            hx-post="/reminders/{{ r.id }}/delete" hx-target="#main-content" hx-swap="innerHTML">
+        <button class="btn btn-danger btn-sm">Del</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

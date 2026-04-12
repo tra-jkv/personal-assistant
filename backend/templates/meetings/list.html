@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Meetings{% endblock %}
+{% block page_title %}Meeting Notes{% endblock %}
+
+{% block content %}
+
+<!-- New meeting form -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-header"><span class="card-title">New Meeting</span></div>
+  <form method="post" action="/meetings/new"
+        hx-post="/meetings/new" hx-target="#main-content" hx-swap="innerHTML">
+    <div class="grid grid-2">
+      <div class="form-group">
+        <label>Meeting Title *</label>
+        <input type="text" name="title" required placeholder="e.g. Sprint Planning, 1:1 with PM" />
+      </div>
+      <div class="form-group">
+        <label>Date *</label>
+        <input type="date" name="meeting_date" required value="{{ today }}" />
+      </div>
+      <div class="form-group">
+        <label>Attendees</label>
+        <input type="text" name="attendees" placeholder="Names, comma-separated" />
+      </div>
+      <div class="form-group">
+        <label>Project</label>
+        <select name="project_id">
+          <option value="">— None —</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Summary</label>
+      <input type="text" name="summary" placeholder="One-liner summary" />
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea name="notes" placeholder="Detailed notes, decisions made…"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Create Meeting Note</button>
+  </form>
+</div>
+
+<!-- List -->
+{% if meetings %}
+<div class="grid">
+  {% for m in meetings %}
+  <div class="card" style="padding:14px 20px">
+    <div class="flex justify-between items-center">
+      <div style="flex:1">
+        <div class="flex items-center gap-2">
+          <a href="/meetings/{{ m.id }}" style="color:var(--text);text-decoration:none;font-weight:600">{{ m.title }}</a>
+          <span class="text-muted text-sm">{{ m.meeting_date }}</span>
+        </div>
+        {% if m.summary %}<p class="text-muted mt-2 text-sm">{{ m.summary }}</p>{% endif %}
+        <div class="text-muted text-sm mt-2">
+          {% if m.attendees %}{{ m.attendees }} &nbsp;·&nbsp;{% endif %}
+          {{ m.action_items|length }} action item{{ 's' if m.action_items|length != 1 }}
+          ({{ m.action_items | selectattr('is_done', 'equalto', true) | list | length }} done)
+          {% if m.project %} &nbsp;·&nbsp; {{ m.project.name }}{% endif %}
+        </div>
+      </div>
+      <div class="flex gap-2" style="flex-shrink:0">
+        <a href="/meetings/{{ m.id }}" class="btn btn-ghost btn-sm">Open</a>
+        <form method="post" action="/meetings/{{ m.id }}/delete"
+              hx-post="/meetings/{{ m.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+              onsubmit="return confirm('Delete meeting note?')">
+          <button class="btn btn-danger btn-sm">Del</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">👥</div>
+  <p>No meeting notes yet.</p>
+</div>
+{% endif %}
+{% endblock %}
