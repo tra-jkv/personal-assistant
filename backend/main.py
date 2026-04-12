@@ -66,7 +66,7 @@ def _run_startup_sync():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run sync in a thread so it doesn't block startup
+    # Run sync in a background thread on startup
     thread = threading.Thread(target=_run_startup_sync, daemon=True)
     thread.start()
     yield

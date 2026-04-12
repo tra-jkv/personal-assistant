@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install run sync lint format check
+.PHONY: help install run seed wipe lint format check
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -13,6 +13,8 @@ help:
 	@echo "Usage:"
 	@echo "  make install   Install dependencies (requires uv)"
 	@echo "  make run       Start the app on http://localhost:$(PORT)"
+	@echo "  make seed      Populate DB with dummy data (for screenshots / dev)"
+	@echo "  make wipe      Wipe all data from the database"
 	@echo "  make lint      Check code with ruff"
 	@echo "  make format    Format code with ruff"
 	@echo "  make check     Run lint + format check together"
@@ -28,6 +30,14 @@ install:
 
 run:
 	uv run uvicorn backend.main:app --reload --port $(PORT)
+
+# ── Data ─────────────────────────────────────────────────────────────────────
+
+seed:
+	uv run python scripts/seed.py --wipe
+
+wipe:
+	uv run python scripts/seed.py --clear
 
 # ── Code quality ──────────────────────────────────────────────────────────────
 

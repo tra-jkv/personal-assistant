@@ -97,7 +97,7 @@
       </div>
       {% endfor %}
 
-      {% if col_tasks|length == 0 and col == 'backlog' and columns.values()|sum(attribute='__len__', default=0) == 0 %}
+      {% if col_tasks|length == 0 and col == 'backlog' and total_tasks == 0 %}
       <div class="empty-state" style="padding:24px 12px">
         <div class="icon">📋</div>
         <h3 style="font-size:.82rem">No tasks yet</h3>

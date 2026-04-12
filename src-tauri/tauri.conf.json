@@ -1,6 +1,6 @@
 {
   "build": {
-    "beforeDevCommand": "python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload",
+    "beforeDevCommand": "uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload",
     "beforeBuildCommand": "",
     "devUrl": "http://localhost:8000",
     "frontendDist": "../backend/static"
