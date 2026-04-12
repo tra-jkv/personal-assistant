@@ -33,8 +33,8 @@ Every feature is available via a full REST API — the same one the UI uses. Poi
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```bash
-git clone https://github.com/your-username/engineering-hub.git
-cd engineering-hub
+git clone https://github.com/your-username/personal-assistant.git
+cd personal-assistant
 make install       # installs deps and creates .env from .env.example
 ```
 
@@ -97,6 +97,6 @@ PRs welcome. Please:
 - Format and lint with `make format && make check`
 - Don't commit `.env` or `data/`
 
-Report security issues via [GitHub Security Advisories](https://github.com/your-username/engineering-hub/security/advisories/new) — not public issues.
+Report security issues via [GitHub Security Advisories](https://github.com/your-username/personal-assistant/security/advisories/new) — not public issues.
 
 
