@@ -8,10 +8,11 @@ Fetches user activity from Jira:
 - Transitions
 """
 
-from jira import JIRA, JIRAError
-from datetime import datetime
-from typing import List, Dict, Optional
 import os
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from jira import JIRA, JIRAError
 
 
 class JiraService:
@@ -76,9 +77,7 @@ class JiraService:
                         "key": issue.key,
                         "summary": issue.fields.summary,
                         "status": issue.fields.status.name,
-                        "priority": issue.fields.priority.name
-                        if issue.fields.priority
-                        else "None",
+                        "priority": issue.fields.priority.name if issue.fields.priority else "None",
                         "type": issue.fields.issuetype.name,
                         "url": f"{self.jira.server_url}/browse/{issue.key}",
                         "updated": issue.fields.updated,
@@ -133,9 +132,7 @@ class JiraService:
 
                 for comment in issue_comments:
                     # Check if comment is from since timestamp
-                    comment_datetime = datetime.strptime(
-                        comment.created, "%Y-%m-%dT%H:%M:%S.%f%z"
-                    )
+                    comment_datetime = datetime.strptime(comment.created, "%Y-%m-%dT%H:%M:%S.%f%z")
                     if comment_datetime.replace(tzinfo=None) >= since:
                         comments.append(
                             {
@@ -167,9 +164,7 @@ class JiraService:
                 changelog = issue.changelog
 
                 for history in changelog.histories:
-                    history_datetime = datetime.strptime(
-                        history.created, "%Y-%m-%dT%H:%M:%S.%f%z"
-                    )
+                    history_datetime = datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
 
                     if history_datetime.replace(tzinfo=None) >= since:
                         for item in history.items:
@@ -194,9 +189,7 @@ class JiraService:
         """Get the current user's email"""
         return self.current_user
 
-    def get_epics(
-        self, projects: List[str] = None, max_results: int = 100
-    ) -> List[Dict]:
+    def get_epics(self, projects: List[str] = None, max_results: int = 100) -> List[Dict]:
         """
         Get all epics from specified projects (or all accessible projects)
 
@@ -268,15 +261,15 @@ class JiraService:
                 if epic_key:
                     if epic_key not in stories_by_epic:
                         stories_by_epic[epic_key] = []
-                    stories_by_epic[epic_key].append(
-                        self._issue_to_story_dict(issue, epic_key)
-                    )
+                    stories_by_epic[epic_key].append(self._issue_to_story_dict(issue, epic_key))
 
             print(f"      Found {len(seen_keys)} stories directly assigned")
 
             # Strategy 2: Get parent stories from my subtasks (stories where I have subtasks assigned)
             print(f"    Fetching my subtasks in {project_key}...")
-            jql_subtasks = f"project = {project_key} AND issuetype = Sub-task AND assignee = currentUser()"
+            jql_subtasks = (
+                f"project = {project_key} AND issuetype = Sub-task AND assignee = currentUser()"
+            )
             subtasks = self.jira.search_issues(jql_subtasks, maxResults=200)
 
             # Collect parent keys that we don't have yet
@@ -307,14 +300,10 @@ class JiraService:
                     if epic_key:
                         if epic_key not in stories_by_epic:
                             stories_by_epic[epic_key] = []
-                        stories_by_epic[epic_key].append(
-                            self._issue_to_story_dict(issue, epic_key)
-                        )
+                        stories_by_epic[epic_key].append(self._issue_to_story_dict(issue, epic_key))
 
             total_stories = sum(len(s) for s in stories_by_epic.values())
-            print(
-                f"    Total: {total_stories} stories across {len(stories_by_epic)} epics"
-            )
+            print(f"    Total: {total_stories} stories across {len(stories_by_epic)} epics")
 
         except JIRAError as e:
             print(f"Error fetching stories for project {project_key}: {e}")
@@ -403,10 +392,7 @@ class JiraService:
             if not transition_id:
                 # Try partial match
                 for t in transitions:
-                    if (
-                        target_lower in t["name"].lower()
-                        or t["name"].lower() in target_lower
-                    ):
+                    if target_lower in t["name"].lower() or t["name"].lower() in target_lower:
                         transition_id = t["id"]
                         transition_name = t["name"]
                         break
@@ -462,9 +448,7 @@ class JiraService:
                 start_at = 0
                 max_results = 100
                 while True:
-                    results = self.jira.search_issues(
-                        jql, startAt=start_at, maxResults=max_results
-                    )
+                    results = self.jira.search_issues(jql, startAt=start_at, maxResults=max_results)
 
                     if not results:
                         break
@@ -529,9 +513,7 @@ class JiraService:
 
         return None
 
-    def get_stories_for_epic(
-        self, epic_key: str, assigned_to_me: bool = False
-    ) -> List[Dict]:
+    def get_stories_for_epic(self, epic_key: str, assigned_to_me: bool = False) -> List[Dict]:
         """
         Get stories/issues belonging to an epic
 
@@ -774,9 +756,7 @@ class JiraService:
                     self.jira.transition_issue(issue, target_transition["id"])
                 else:
                     # List available transitions for debugging
-                    available = [
-                        f"{t['name']} -> {t['to']['name']}" for t in transitions
-                    ]
+                    available = [f"{t['name']} -> {t['to']['name']}" for t in transitions]
                     return {
                         "success": False,
                         "key": issue_key,
@@ -847,9 +827,7 @@ def create_jira_service() -> Optional[JiraService]:
     if not all([server, email, token]):
         print("Missing Jira credentials in .env file")
         print("Required: JIRA_SERVER, JIRA_EMAIL, JIRA_API_TOKEN")
-        print(
-            "Get API token from: https://id.atlassian.com/manage-profile/security/api-tokens"
-        )
+        print("Get API token from: https://id.atlassian.com/manage-profile/security/api-tokens")
         return None
 
     return JiraService(server, email, token)

@@ -1,34 +1,33 @@
-from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
-from datetime import datetime, timedelta
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-import httpx
 import json
 import os
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+import httpx
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+from sqlalchemy.orm import Session, joinedload
 
 from backend.database import get_db
 from backend.models import (
-    Project,
-    Note,
-    MeetingNote,
-    Reminder,
-    ExternalLink,
-    Task,
-    Goal,
-    Epic,
+    ConversationMessage,
+    ConversationSession,
     DailyActivity,
     DailySummary,
-    ConversationSession,
-    ConversationMessage,
+    Epic,
+    ExternalLink,
+    Goal,
+    MeetingNote,
+    Note,
+    Project,
+    Reminder,
+    Task,
 )
 
 router = APIRouter(prefix="/ai", tags=["ai"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 # Gemini API configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -101,7 +100,7 @@ def list_sessions(
     """List recent conversation sessions."""
     sessions = (
         db.query(ConversationSession)
-        .filter(ConversationSession.is_active == True)
+        .filter(ConversationSession.is_active)
         .order_by(ConversationSession.updated_at.desc())
         .limit(limit)
         .all()
@@ -165,11 +164,7 @@ def delete_session(
     db: Session = Depends(get_db),
 ):
     """Delete (archive) a conversation session."""
-    session = (
-        db.query(ConversationSession)
-        .filter(ConversationSession.id == session_id)
-        .first()
-    )
+    session = db.query(ConversationSession).filter(ConversationSession.id == session_id).first()
     if not session:
         return JSONResponse({"error": "Session not found"}, status_code=404)
 
@@ -186,11 +181,7 @@ def update_session_title(
     db: Session = Depends(get_db),
 ):
     """Update a session's title."""
-    session = (
-        db.query(ConversationSession)
-        .filter(ConversationSession.id == session_id)
-        .first()
-    )
+    session = db.query(ConversationSession).filter(ConversationSession.id == session_id).first()
     if not session:
         return JSONResponse({"error": "Session not found"}, status_code=404)
 
@@ -208,11 +199,7 @@ def _get_or_create_session(
 ) -> ConversationSession:
     """Get an existing session or create a new one."""
     if session_id:
-        session = (
-            db.query(ConversationSession)
-            .filter(ConversationSession.id == session_id)
-            .first()
-        )
+        session = db.query(ConversationSession).filter(ConversationSession.id == session_id).first()
         if session:
             return session
 
@@ -247,9 +234,7 @@ def _add_message(
     return message
 
 
-def _build_conversation_history(
-    session: ConversationSession, max_messages: int = 20
-) -> List[Dict]:
+def _build_conversation_history(session: ConversationSession, max_messages: int = 20) -> List[Dict]:
     """Build conversation history for Gemini API from session messages."""
     history = []
     messages = session.messages[-max_messages:]  # Last N messages
@@ -346,9 +331,7 @@ async def agent_request(
 
             if request_data.mode == "plan" and result.get("plan"):
                 action_data = result.get("plan")
-                response_content = (
-                    response_content or "Here's my plan for your request."
-                )
+                response_content = response_content or "Here's my plan for your request."
             elif request_data.mode == "execute" and result.get("actions_executed"):
                 action_data = {
                     "actions_executed": result.get("actions_executed"),
@@ -356,9 +339,7 @@ async def agent_request(
                 }
                 response_content = result.get("summary", "Actions executed.")
 
-            _add_message(
-                db, session, "assistant", response_content, action_type, action_data
-            )
+            _add_message(db, session, "assistant", response_content, action_type, action_data)
 
     # Add session_id to result
     result["session_id"] = session.id
@@ -547,9 +528,7 @@ def build_context(db: Session) -> str:
     goals = db.query(Goal).all()
     lines.append("=== GOALS ===")
     for g in goals:
-        projects_list = (
-            ", ".join([p.name for p in g.projects]) if g.projects else "none"
-        )
+        projects_list = ", ".join([p.name for p in g.projects]) if g.projects else "none"
         lines.append(
             f"- [{g.status.value}] {g.title} (year: {g.year}, progress: {g.progress_pct}%): {g.description}"
             f"\n  Linked projects: {projects_list}"
@@ -616,27 +595,19 @@ def build_context(db: Session) -> str:
                 try:
                     subtasks = json.loads(t.subtasks_json)
                     if subtasks:
-                        done_count = sum(
-                            1 for st in subtasks if st.get("status") == "Done"
-                        )
+                        done_count = sum(1 for st in subtasks if st.get("status") == "Done")
                         remaining = len(subtasks) - done_count
-                        subtask_info = (
-                            f" ({remaining}/{len(subtasks)} subtasks remaining)"
-                        )
-                except:
+                        subtask_info = f" ({remaining}/{len(subtasks)} subtasks remaining)"
+                except Exception:
                     pass
 
-            lines.append(
-                f"STORY {jira} {t.title} - {t.status}{subtask_info} {assignee} {epic}"
-            )
+            lines.append(f"STORY {jira} {t.title} - {t.status}{subtask_info} {assignee} {epic}")
 
             # Show subtasks nested under story (only non-done ones for brevity)
             for st in subtasks:
                 if st.get("status") != "Done":
                     st_assignee = f"@{st['assignee']}" if st.get("assignee") else ""
-                    lines.append(
-                        f"  └─ [{st['key']}] {st['title']} - {st['status']} {st_assignee}"
-                    )
+                    lines.append(f"  └─ [{st['key']}] {st['title']} - {st['status']} {st_assignee}")
 
         if not current_sprint_tasks:
             lines.append("- No tasks in current sprint")
@@ -657,14 +628,10 @@ def build_context(db: Session) -> str:
                 try:
                     subtasks = json.loads(t.subtasks_json)
                     if subtasks:
-                        done_count = sum(
-                            1 for st in subtasks if st.get("status") == "Done"
-                        )
+                        done_count = sum(1 for st in subtasks if st.get("status") == "Done")
                         remaining = len(subtasks) - done_count
-                        subtask_info = (
-                            f" ({remaining}/{len(subtasks)} subtasks remaining)"
-                        )
-                except:
+                        subtask_info = f" ({remaining}/{len(subtasks)} subtasks remaining)"
+                except Exception:
                     pass
 
             lines.append(
@@ -679,9 +646,7 @@ def build_context(db: Session) -> str:
         lines.append(f"### {n.title}{proj}\n{n.content[:500]}\ntags: {n.tags}")
 
     # Meetings
-    meetings = (
-        db.query(MeetingNote).order_by(MeetingNote.meeting_date.desc()).limit(10).all()
-    )
+    meetings = db.query(MeetingNote).order_by(MeetingNote.meeting_date.desc()).limit(10).all()
     lines.append("\n=== RECENT MEETINGS ===")
     for m in meetings:
         items = "\n".join(
@@ -735,12 +700,7 @@ def build_context(db: Session) -> str:
             )
 
     # Reminders
-    reminders = (
-        db.query(Reminder)
-        .filter(Reminder.is_done == False)
-        .order_by(Reminder.due_at)
-        .all()
-    )
+    reminders = db.query(Reminder).filter(not Reminder.is_done).order_by(Reminder.due_at).all()
     lines.append("\n=== OPEN REMINDERS ===")
     for r in reminders:
         lines.append(
@@ -748,9 +708,7 @@ def build_context(db: Session) -> str:
         )
 
     # External Links
-    ext_links = (
-        db.query(ExternalLink).order_by(ExternalLink.created_at.desc()).limit(30).all()
-    )
+    ext_links = db.query(ExternalLink).order_by(ExternalLink.created_at.desc()).limit(30).all()
     lines.append("\n=== EXTERNAL LINKS ===")
     for lnk in ext_links:
         context_parts = []

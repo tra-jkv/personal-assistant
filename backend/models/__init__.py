@@ -1,22 +1,20 @@
-from .models import (
-    Project,
-    ProjectStatus,
-    Note,
-    Reminder,
-    StandupLog,
-    MeetingNote,
-    ActionItem,
-    ExternalLink,
-    LinkType,
-    Task,
-    TaskStatus,
-    Priority,
-    SyncState,
-    DailyActivity,
-    DailySummary,
-    Goal,
-    GoalStatus,
-    Epic,
-    ConversationSession,
-    ConversationMessage,
-)
+from .models import ActionItem as ActionItem
+from .models import ConversationMessage as ConversationMessage
+from .models import ConversationSession as ConversationSession
+from .models import DailyActivity as DailyActivity
+from .models import DailySummary as DailySummary
+from .models import Epic as Epic
+from .models import ExternalLink as ExternalLink
+from .models import Goal as Goal
+from .models import GoalStatus as GoalStatus
+from .models import LinkType as LinkType
+from .models import MeetingNote as MeetingNote
+from .models import Note as Note
+from .models import Priority as Priority
+from .models import Project as Project
+from .models import ProjectStatus as ProjectStatus
+from .models import Reminder as Reminder
+from .models import StandupLog as StandupLog
+from .models import SyncState as SyncState
+from .models import Task as Task
+from .models import TaskStatus as TaskStatus

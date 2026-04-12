@@ -1,21 +1,20 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from sqlalchemy import case
-from typing import Optional
-from datetime import datetime
 from pydantic import BaseModel
-import os
+from sqlalchemy import case
+from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import Reminder, Project, Goal
+from backend.models import Goal, Project, Reminder
 from backend.models.models import Priority
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 # Priority order for sorting (critical first)
 PRIORITY_ORDER = {
@@ -105,9 +104,7 @@ def create_reminder_api(
             "priority": reminder.priority.value if reminder.priority else "medium",
             "is_done": reminder.is_done,
             "project_id": reminder.project_id,
-            "created_at": reminder.created_at.isoformat()
-            if reminder.created_at
-            else None,
+            "created_at": reminder.created_at.isoformat() if reminder.created_at else None,
         },
     }
 
@@ -127,7 +124,7 @@ def list_reminders_api(
         query = query.filter(Reminder.project_id == project_id)
 
     if not include_done:
-        query = query.filter(Reminder.is_done == False)
+        query = query.filter(not Reminder.is_done)
 
     reminders = query.order_by(Reminder.due_at).all()
 
@@ -181,9 +178,7 @@ def get_reminder_api(
     """Get a single reminder by ID."""
     reminder = db.query(Reminder).filter(Reminder.id == reminder_id).first()
     if not reminder:
-        return JSONResponse(
-            {"success": False, "error": "Reminder not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Reminder not found"}, status_code=404)
 
     return {
         "success": True,
@@ -196,9 +191,7 @@ def get_reminder_api(
             "is_done": reminder.is_done,
             "project_id": reminder.project_id,
             "task_id": reminder.task_id,
-            "created_at": reminder.created_at.isoformat()
-            if reminder.created_at
-            else None,
+            "created_at": reminder.created_at.isoformat() if reminder.created_at else None,
         },
     }
 
@@ -212,9 +205,7 @@ def update_reminder_api(
     """Update an existing reminder. Only provided fields will be updated."""
     reminder = db.query(Reminder).filter(Reminder.id == reminder_id).first()
     if not reminder:
-        return JSONResponse(
-            {"success": False, "error": "Reminder not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Reminder not found"}, status_code=404)
 
     if reminder_data.title is not None:
         reminder.title = reminder_data.title
@@ -234,9 +225,7 @@ def update_reminder_api(
         except ValueError:
             pass
     if reminder_data.project_id is not None:
-        reminder.project_id = (
-            reminder_data.project_id if reminder_data.project_id else None
-        )
+        reminder.project_id = reminder_data.project_id if reminder_data.project_id else None
     if reminder_data.task_id is not None:
         reminder.task_id = reminder_data.task_id if reminder_data.task_id else None
     if reminder_data.is_done is not None:
@@ -256,9 +245,7 @@ def update_reminder_api(
             "is_done": reminder.is_done,
             "project_id": reminder.project_id,
             "task_id": reminder.task_id,
-            "created_at": reminder.created_at.isoformat()
-            if reminder.created_at
-            else None,
+            "created_at": reminder.created_at.isoformat() if reminder.created_at else None,
         },
     }
 
@@ -271,9 +258,7 @@ def delete_reminder_api(
     """Delete a reminder by ID."""
     reminder = db.query(Reminder).filter(Reminder.id == reminder_id).first()
     if not reminder:
-        return JSONResponse(
-            {"success": False, "error": "Reminder not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Reminder not found"}, status_code=404)
 
     db.delete(reminder)
     db.commit()

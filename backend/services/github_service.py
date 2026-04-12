@@ -12,11 +12,12 @@ Supports two authentication methods:
 2. Personal Access Token - Fallback method
 """
 
-from github import Github, GithubException
-from datetime import datetime
-from typing import List, Dict, Optional
 import os
 import subprocess
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from github import Github, GithubException
 
 
 class GitHubService:
@@ -76,17 +77,13 @@ class GitHubService:
             query = f"author:{self.user.login} committer-date:>={since_str}"
 
             # Search commits
-            search_results = self.github.search_commits(
-                query=query, sort="committer-date"
-            )
+            search_results = self.github.search_commits(query=query, sort="committer-date")
 
             for commit in search_results:
                 commits.append(
                     {
                         "repo": commit.repository.full_name,
-                        "message": commit.commit.message.split("\n")[
-                            0
-                        ],  # First line only
+                        "message": commit.commit.message.split("\n")[0],  # First line only
                         "sha": commit.sha[:7],
                         "url": commit.html_url,
                         "timestamp": commit.commit.committer.date,
@@ -217,17 +214,13 @@ def get_gh_cli_token() -> Optional[str]:
     """
     try:
         # Check if gh CLI is installed
-        result = subprocess.run(
-            ["gh", "auth", "status"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=5)
 
         if result.returncode != 0:
             return None
 
         # Get token from gh CLI
-        result = subprocess.run(
-            ["gh", "auth", "token"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=5)
 
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()

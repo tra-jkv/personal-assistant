@@ -1,19 +1,18 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from typing import Optional
 from pydantic import BaseModel
-import os
+from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import Note, Project, ExternalLink
+from backend.models import ExternalLink, Note, Project
 from backend.models.models import LinkType
 
 router = APIRouter(prefix="/notes", tags=["notes"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 # ── Pydantic models for JSON API ──────────────────────────────────────────────
@@ -122,9 +121,7 @@ def get_note_api(
     """Get a single note by ID."""
     note = db.query(Note).filter(Note.id == note_id).first()
     if not note:
-        return JSONResponse(
-            {"success": False, "error": "Note not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Note not found"}, status_code=404)
 
     return {
         "success": True,
@@ -150,9 +147,7 @@ def update_note_api(
     """Update an existing note. Only provided fields will be updated."""
     note = db.query(Note).filter(Note.id == note_id).first()
     if not note:
-        return JSONResponse(
-            {"success": False, "error": "Note not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Note not found"}, status_code=404)
 
     if note_data.title is not None:
         note.title = note_data.title
@@ -191,9 +186,7 @@ def delete_note_api(
     """Delete a note by ID."""
     note = db.query(Note).filter(Note.id == note_id).first()
     if not note:
-        return JSONResponse(
-            {"success": False, "error": "Note not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Note not found"}, status_code=404)
 
     db.delete(note)
     db.commit()

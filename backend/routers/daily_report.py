@@ -1,20 +1,19 @@
-from fastapi import APIRouter, Depends, Request, Form
+import os
+from datetime import date, datetime
+
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-import os
-from datetime import datetime, date
 
 from backend.database import get_db
-from backend.services.daily_report_sync import DailyReportSync
-from backend.services.sync_manager import SyncManager
-from backend.services.github_service import get_gh_cli_token
 from backend.models import DailyActivity, DailySummary
+from backend.services.daily_report_sync import DailyReportSync
+from backend.services.github_service import get_gh_cli_token
+from backend.services.sync_manager import SyncManager
 
 router = APIRouter(prefix="/daily-report", tags=["daily-report"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 def get_today_report_from_db(db: Session) -> dict:
@@ -22,9 +21,7 @@ def get_today_report_from_db(db: Session) -> dict:
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Get today's activities
-    activities = (
-        db.query(DailyActivity).filter(DailyActivity.activity_date >= today).all()
-    )
+    activities = db.query(DailyActivity).filter(DailyActivity.activity_date >= today).all()
 
     # Get today's summary
     summary = db.query(DailySummary).filter(DailySummary.summary_date >= today).first()
@@ -149,9 +146,7 @@ def daily_report_page(request: Request, db: Session = Depends(get_db)):
     jira_info = sync_manager.get_sync_info("jira")
 
     # Check if GitHub and Jira are configured
-    github_configured = (
-        get_gh_cli_token() is not None or os.getenv("GITHUB_TOKEN") is not None
-    )
+    github_configured = get_gh_cli_token() is not None or os.getenv("GITHUB_TOKEN") is not None
     jira_configured = all(
         [os.getenv("JIRA_SERVER"), os.getenv("JIRA_EMAIL"), os.getenv("JIRA_API_TOKEN")]
     )
@@ -174,9 +169,7 @@ def daily_report_page(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/sync", response_class=HTMLResponse)
-async def sync_now(
-    request: Request, force_full: bool = Form(False), db: Session = Depends(get_db)
-):
+async def sync_now(request: Request, force_full: bool = Form(False), db: Session = Depends(get_db)):
     """Perform incremental sync and return updated report"""
     sync_service = DailyReportSync(db)
 

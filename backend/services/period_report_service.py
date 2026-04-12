@@ -5,11 +5,13 @@ Generates reports for different time periods (monthly, quarterly)
 Reads from database instead of calling APIs (much faster!)
 """
 
+import json
+from collections import Counter
 from datetime import datetime, timedelta
 from typing import Dict, List
-from collections import Counter
+
 from sqlalchemy.orm import Session
-import json
+
 from backend.models import DailyActivity, DailySummary
 
 
@@ -67,17 +69,11 @@ class PeriodReportService:
         try:
             # Get activities from database
             activities = (
-                self.db.query(DailyActivity)
-                .filter(DailyActivity.activity_date >= since)
-                .all()
+                self.db.query(DailyActivity).filter(DailyActivity.activity_date >= since).all()
             )
 
             # Get daily summaries from database
-            summaries = (
-                self.db.query(DailySummary)
-                .filter(DailySummary.summary_date >= since)
-                .all()
-            )
+            summaries = self.db.query(DailySummary).filter(DailySummary.summary_date >= since).all()
 
             # Separate GitHub and Jira activities
             github_activities = [a for a in activities if a.source == "github"]
@@ -85,18 +81,14 @@ class PeriodReportService:
 
             # Build GitHub report from database
             report["github"] = self._build_github_report(github_activities)
-            report["statistics"]["github"] = self._calculate_github_stats_from_db(
-                github_activities
-            )
+            report["statistics"]["github"] = self._calculate_github_stats_from_db(github_activities)
             report["insights"]["github"] = self._generate_github_insights_from_db(
                 github_activities, days
             )
 
             # Build Jira report from database
             report["jira"] = self._build_jira_report(jira_activities)
-            report["statistics"]["jira"] = self._calculate_jira_stats_from_db(
-                jira_activities
-            )
+            report["statistics"]["jira"] = self._calculate_jira_stats_from_db(jira_activities)
             report["insights"]["jira"] = self._generate_jira_insights_from_db(
                 jira_activities, summaries, days
             )
@@ -118,11 +110,9 @@ class PeriodReportService:
 
         for activity in activities:
             try:
-                metadata = (
-                    json.loads(activity.extra_data) if activity.extra_data else {}
-                )
-            except:
-                metadata = {}
+                json.loads(activity.extra_data) if activity.extra_data else {}
+            except Exception:
+                pass
 
             if activity.activity_type == "commit":
                 commits.append(
@@ -178,11 +168,9 @@ class PeriodReportService:
 
         for activity in activities:
             try:
-                metadata = (
-                    json.loads(activity.extra_data) if activity.extra_data else {}
-                )
-            except:
-                metadata = {}
+                json.loads(activity.extra_data) if activity.extra_data else {}
+            except Exception:
+                pass
 
             if activity.activity_type == "assigned_issue":
                 assigned_issues.append(
@@ -287,9 +275,7 @@ class PeriodReportService:
 
         return stats
 
-    def _generate_github_insights_from_db(
-        self, activities: List[DailyActivity], days: int
-    ) -> Dict:
+    def _generate_github_insights_from_db(self, activities: List[DailyActivity], days: int) -> Dict:
         """Generate insights from GitHub database activities"""
         commits = [a for a in activities if a.activity_type == "commit"]
         prs = [a for a in activities if a.activity_type == "pull_request"]
@@ -313,9 +299,7 @@ class PeriodReportService:
 
         # Calculate simple productivity score
         # Score = commits + (PRs * 3) + (reviews * 2)
-        insights["productivity_score"] = (
-            len(commits) + (len(prs) * 3) + (len(reviews) * 2)
-        )
+        insights["productivity_score"] = len(commits) + (len(prs) * 3) + (len(reviews) * 2)
 
         return insights
 

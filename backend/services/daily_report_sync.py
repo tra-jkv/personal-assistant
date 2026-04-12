@@ -5,14 +5,17 @@ Aggregates activity from GitHub and Jira to generate daily reports
 Uses incremental syncing to only fetch new data since last sync
 """
 
-from datetime import datetime, date
-from typing import Dict
-from sqlalchemy.orm import Session
 import json
+from datetime import date, datetime
+from typing import Dict
+
+from sqlalchemy.orm import Session
+
+from backend.models import DailyActivity, DailySummary
+
 from .github_service import create_github_service
 from .jira_service import create_jira_service
-from .sync_manager import SyncManager, DEFAULT_SYNC_START
-from backend.models import DailyActivity, DailySummary
+from .sync_manager import DEFAULT_SYNC_START, SyncManager
 
 
 def json_serial(obj):
@@ -77,9 +80,7 @@ class DailyReportSync:
                 gh_activity = self.github.get_activity_since(github_since)
                 report["github"] = gh_activity
                 report["summary"]["total_commits"] = len(gh_activity.get("commits", []))
-                report["summary"]["total_prs"] = len(
-                    gh_activity.get("pull_requests", [])
-                )
+                report["summary"]["total_prs"] = len(gh_activity.get("pull_requests", []))
                 report["summary"]["total_issues"] = len(gh_activity.get("issues", []))
                 report["summary"]["total_reviews"] = len(gh_activity.get("reviews", []))
 
@@ -90,9 +91,7 @@ class DailyReportSync:
                 report["errors"].append(f"GitHub error: {str(e)}")
                 report["github"] = {"error": str(e)}
                 if self.sync_manager:
-                    self.sync_manager.update_sync_state(
-                        "github", success=False, error=str(e)
-                    )
+                    self.sync_manager.update_sync_state("github", success=False, error=str(e))
         else:
             report["errors"].append("GitHub not configured")
 
@@ -101,18 +100,10 @@ class DailyReportSync:
             try:
                 jira_activity = self.jira.get_activity_since(jira_since)
                 report["jira"] = jira_activity
-                report["summary"]["jira_assigned"] = len(
-                    jira_activity.get("assigned_issues", [])
-                )
-                report["summary"]["jira_worked"] = len(
-                    jira_activity.get("worked_issues", [])
-                )
-                report["summary"]["jira_comments"] = len(
-                    jira_activity.get("comments", [])
-                )
-                report["summary"]["jira_transitions"] = len(
-                    jira_activity.get("transitions", [])
-                )
+                report["summary"]["jira_assigned"] = len(jira_activity.get("assigned_issues", []))
+                report["summary"]["jira_worked"] = len(jira_activity.get("worked_issues", []))
+                report["summary"]["jira_comments"] = len(jira_activity.get("comments", []))
+                report["summary"]["jira_transitions"] = len(jira_activity.get("transitions", []))
 
                 # Update sync state
                 if self.sync_manager:
@@ -121,9 +112,7 @@ class DailyReportSync:
                 report["errors"].append(f"Jira error: {str(e)}")
                 report["jira"] = {"error": str(e)}
                 if self.sync_manager:
-                    self.sync_manager.update_sync_state(
-                        "jira", success=False, error=str(e)
-                    )
+                    self.sync_manager.update_sync_state("jira", success=False, error=str(e))
         else:
             report["errors"].append("Jira not configured")
 
@@ -235,9 +224,7 @@ class DailyReportSync:
             # Save daily summary
             summary = report.get("summary", {})
             daily_summary = (
-                self.db.query(DailySummary)
-                .filter(DailySummary.summary_date == today)
-                .first()
+                self.db.query(DailySummary).filter(DailySummary.summary_date == today).first()
             )
 
             if daily_summary:
@@ -298,9 +285,7 @@ class DailyReportSync:
             if gh.get("issues"):
                 lines.append(f"\n  Issues ({len(gh['issues'])}):")
                 for issue in gh["issues"][:5]:
-                    lines.append(
-                        f"    • [{issue['repo']}] {issue['title']} ({issue['state']})"
-                    )
+                    lines.append(f"    • [{issue['repo']}] {issue['title']} ({issue['state']})")
 
             lines.append("")
 
@@ -312,9 +297,7 @@ class DailyReportSync:
             if jira.get("assigned_issues"):
                 lines.append(f"\n  Assigned Issues ({len(jira['assigned_issues'])}):")
                 for issue in jira["assigned_issues"][:10]:
-                    lines.append(
-                        f"    • [{issue['key']}] {issue['summary']} ({issue['status']})"
-                    )
+                    lines.append(f"    • [{issue['key']}] {issue['summary']} ({issue['status']})")
 
             if jira.get("transitions"):
                 lines.append(f"\n  Status Changes ({len(jira['transitions'])}):")
@@ -332,9 +315,7 @@ class DailyReportSync:
             lines.append(f"  • GitHub Commits: {summary.get('total_commits', 0)}")
             lines.append(f"  • GitHub PRs: {summary.get('total_prs', 0)}")
             lines.append(f"  • Jira Issues Worked: {summary.get('jira_worked', 0)}")
-            lines.append(
-                f"  • Jira Status Changes: {summary.get('jira_transitions', 0)}"
-            )
+            lines.append(f"  • Jira Status Changes: {summary.get('jira_transitions', 0)}")
 
         # Errors
         if report.get("errors"):

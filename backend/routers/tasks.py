@@ -1,21 +1,20 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import json
+import os
+from datetime import date
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
-from typing import Optional
-from datetime import date
 from pydantic import BaseModel
-import os
-import json
+from sqlalchemy.orm import Session, joinedload
 
 from backend.database import get_db
-from backend.models import Project, Task, Epic
+from backend.models import Epic, Project, Task
 from backend.models.models import Priority
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 # Add custom filter for parsing JSON in templates
@@ -218,9 +217,7 @@ def get_task_api(
         .first()
     )
     if not task:
-        return JSONResponse(
-            {"success": False, "error": "Task not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Task not found"}, status_code=404)
 
     return {"success": True, "task": _task_to_dict(task)}
 
@@ -253,9 +250,7 @@ def create_task_api(
         description=task_data.description,
         status=task_data.status,
         jira_status=task_data.status,
-        priority=Priority(task_data.priority)
-        if task_data.priority
-        else Priority.medium,
+        priority=Priority(task_data.priority) if task_data.priority else Priority.medium,
         assignee=task_data.assignee,
         due_date=date.fromisoformat(task_data.due_date) if task_data.due_date else None,
         jira_key=task_data.jira_key if task_data.jira_key else None,
@@ -267,9 +262,7 @@ def create_task_api(
     )
 
     if task_data.jira_key:
-        task.jira_url = (
-            f"{os.getenv('JIRA_SERVER', '').rstrip('/')}/browse/{task_data.jira_key}"
-        )
+        task.jira_url = f"{os.getenv('JIRA_SERVER', '').rstrip('/')}/browse/{task_data.jira_key}"
 
     db.add(task)
     db.commit()
@@ -292,9 +285,7 @@ def update_task_api(
         .first()
     )
     if not task:
-        return JSONResponse(
-            {"success": False, "error": "Task not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Task not found"}, status_code=404)
 
     if task_data.title is not None:
         task.title = task_data.title
@@ -310,9 +301,7 @@ def update_task_api(
     if task_data.assignee is not None:
         task.assignee = task_data.assignee
     if task_data.due_date is not None:
-        task.due_date = (
-            date.fromisoformat(task_data.due_date) if task_data.due_date else None
-        )
+        task.due_date = date.fromisoformat(task_data.due_date) if task_data.due_date else None
     if task_data.epic_key is not None:
         task.epic_key = task_data.epic_key if task_data.epic_key else None
     if task_data.project_id is not None:
@@ -332,9 +321,7 @@ def delete_task_api(
     """Delete a task by ID."""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
-        return JSONResponse(
-            {"success": False, "error": "Task not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Task not found"}, status_code=404)
 
     db.delete(task)
     db.commit()
@@ -358,9 +345,7 @@ def move_task_api(
     """
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
-        return JSONResponse(
-            {"success": False, "error": "Task not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Task not found"}, status_code=404)
 
     # Convert kanban column to Jira status if needed
     new_status = move_data.status
@@ -392,14 +377,10 @@ def link_jira_to_task_api(
     """Link a Jira issue to an existing task."""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
-        return JSONResponse(
-            {"success": False, "error": "Task not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Task not found"}, status_code=404)
 
     task.jira_key = link_data.jira_key
-    task.jira_url = (
-        f"{os.getenv('JIRA_SERVER', '').rstrip('/')}/browse/{link_data.jira_key}"
-    )
+    task.jira_url = f"{os.getenv('JIRA_SERVER', '').rstrip('/')}/browse/{link_data.jira_key}"
     task.needs_sync_back = True
 
     db.commit()
@@ -415,9 +396,7 @@ def normalize_status(jira_status: str) -> str:
     return JIRA_STATUS_MAP.get(jira_status, "todo")
 
 
-def _board_context(
-    db: Session, project_id: Optional[int] = None, epic_key: Optional[str] = None
-):
+def _board_context(db: Session, project_id: Optional[int] = None, epic_key: Optional[str] = None):
     """Build grouped task data for kanban rendering."""
     projects = db.query(Project).order_by(Project.name).all()
     epics = db.query(Epic).order_by(Epic.key.desc()).all()
@@ -621,8 +600,9 @@ def move_task(
     # If synced task, sync to Jira immediately
     if task.jira_key and old_status != status:
         try:
-            from backend.services.jira_service import JiraService
             import os
+
+            from backend.services.jira_service import JiraService
 
             jira_server = os.getenv("JIRA_SERVER")
             jira_email = os.getenv("JIRA_EMAIL")
@@ -670,9 +650,7 @@ def edit_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Track if jira-synced fields changed
-    jira_fields_changed = (
-        task.status != status or task.assignee != assignee or task.title != title
-    )
+    jira_fields_changed = task.status != status or task.assignee != assignee or task.title != title
 
     task.title = title
     task.description = description
@@ -762,16 +740,10 @@ async def sync_tasks_to_jira(request: Request, db: Session = Depends(get_db)):
     from backend.services.jira_service import create_jira_service
 
     # Get tasks that need sync-back
-    tasks_to_sync = (
-        db.query(Task)
-        .filter(Task.needs_sync_back == True, Task.jira_key.isnot(None))
-        .all()
-    )
+    tasks_to_sync = db.query(Task).filter(Task.needs_sync_back, Task.jira_key.isnot(None)).all()
 
     if not tasks_to_sync:
-        return JSONResponse(
-            {"success": True, "message": "No tasks to sync", "synced": 0}
-        )
+        return JSONResponse({"success": True, "message": "No tasks to sync", "synced": 0})
 
     jira = create_jira_service()
     if not jira:
@@ -789,9 +761,7 @@ async def sync_tasks_to_jira(request: Request, db: Session = Depends(get_db)):
     for task in tasks_to_sync:
         try:
             # Map our status to Jira status
-            jira_status = KANBAN_TO_JIRA_MAP.get(
-                normalize_status(task.status), task.status
-            )
+            jira_status = KANBAN_TO_JIRA_MAP.get(normalize_status(task.status), task.status)
 
             # Update Jira issue
             result = jira.update_issue(
@@ -843,9 +813,7 @@ async def transition_subtask(
     # Get the parent task
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
-        return JSONResponse(
-            {"success": False, "error": "Task not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Task not found"}, status_code=404)
 
     # Parse request body
     try:
@@ -857,9 +825,7 @@ async def transition_subtask(
                 status_code=400,
             )
     except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": f"Invalid JSON: {e}"}, status_code=400
-        )
+        return JSONResponse({"success": False, "error": f"Invalid JSON: {e}"}, status_code=400)
 
     # Create Jira service
     jira = create_jira_service()
@@ -872,9 +838,7 @@ async def transition_subtask(
     result = jira.transition_issue(subtask_key, target_status)
 
     if not result["success"]:
-        return JSONResponse(
-            {"success": False, "error": result["error"]}, status_code=400
-        )
+        return JSONResponse({"success": False, "error": result["error"]}, status_code=400)
 
     # Update local subtasks_json
     if task.subtasks_json:
@@ -915,6 +879,4 @@ def get_subtask_transitions(
         )
 
     transitions = jira.get_transitions_for_issue(subtask_key)
-    return JSONResponse(
-        {"success": True, "subtask_key": subtask_key, "transitions": transitions}
-    )
+    return JSONResponse({"success": True, "subtask_key": subtask_key, "transitions": transitions})

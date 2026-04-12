@@ -1,18 +1,17 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
-from typing import Optional
-import os
 
 from backend.database import get_db
 from backend.models import Epic, Project
 from backend.models.models import ProjectStatus
 
 router = APIRouter(prefix="/epics", tags=["epics"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 # Get current user display name from environment
 CURRENT_USER_DISPLAY_NAME = os.getenv("USER_DISPLAY_NAME", "Unknown")
@@ -61,9 +60,7 @@ def list_epics(
     # Group epics by status
     epics_by_status = {}
     for col in EPIC_STATUS_COLUMNS:
-        epics_by_status[col["key"]] = [
-            e for e in epics_list if e.status in col["statuses"]
-        ]
+        epics_by_status[col["key"]] = [e for e in epics_list if e.status in col["statuses"]]
 
     # Get all active projects for the dropdown
     projects = (
@@ -146,9 +143,7 @@ def get_epic(
 
     # Count task stats
     total_tasks = len(epic.tasks)
-    done_tasks = sum(
-        1 for t in epic.tasks if t.status and t.status.lower() in ("done", "closed")
-    )
+    done_tasks = sum(1 for t in epic.tasks if t.status and t.status.lower() in ("done", "closed"))
 
     return templates.TemplateResponse(
         request,

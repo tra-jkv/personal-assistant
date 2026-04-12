@@ -5,20 +5,22 @@ Syncs data one day at a time to avoid timeouts.
 Saves progress so it can be resumed if interrupted.
 """
 
-from datetime import datetime, date, timedelta
-from typing import Optional
-from sqlalchemy.orm import Session
 import json
 import os
-from dotenv import load_dotenv
+import threading
+from datetime import date, datetime, timedelta
+from typing import Optional
 
-# Load env vars
+from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+
 load_dotenv()
 
-from backend.database import SessionLocal
-from backend.models import DailyActivity, DailySummary, SyncState, Epic, Task
-from .github_service import create_github_service
-from .jira_service import create_jira_service
+from backend.database import SessionLocal  # noqa: E402
+from backend.models import DailyActivity, DailySummary, Epic, SyncState, Task  # noqa: E402
+
+from .github_service import create_github_service  # noqa: E402
+from .jira_service import create_jira_service  # noqa: E402
 
 # Default start date — read from SYNC_START_DATE env var, fallback to 2025-01-01
 _sync_start_env = os.getenv("SYNC_START_DATE", "2025-01-01")
@@ -28,7 +30,6 @@ except ValueError:
     DEFAULT_START = date(2025, 1, 1)
 
 # Global sync state — prevents concurrent syncs
-import threading
 
 _sync_lock = threading.Lock()
 _sync_status = {"running": False, "progress": "", "started_at": None}
@@ -57,18 +58,14 @@ class BackgroundSync:
 
     def get_last_synced_date(self) -> Optional[date]:
         """Get the last date that was successfully synced"""
-        state = (
-            self.db.query(SyncState).filter(SyncState.source == "background").first()
-        )
+        state = self.db.query(SyncState).filter(SyncState.source == "background").first()
         if state and state.last_sync_at:
             return state.last_sync_at.date()
         return None
 
     def set_last_synced_date(self, d: date):
         """Save the last synced date"""
-        state = (
-            self.db.query(SyncState).filter(SyncState.source == "background").first()
-        )
+        state = self.db.query(SyncState).filter(SyncState.source == "background").first()
         if state:
             state.last_sync_at = datetime.combine(d, datetime.min.time())
             state.total_syncs += 1
@@ -94,9 +91,7 @@ class BackgroundSync:
             try:
                 query = f"author:{self.github.user.login} committer-date:{start_str}..{end_str}"
                 results = list(
-                    self.github.github.search_commits(
-                        query=query, sort="committer-date"
-                    )
+                    self.github.github.search_commits(query=query, sort="committer-date")
                 )
                 self._github_commits_cache = []
                 for c in results:
@@ -127,9 +122,7 @@ class BackgroundSync:
             print("  Fetching GitHub PRs...", end=" ", flush=True)
             try:
                 query = f"author:{self.github.user.login} created:{start_str}..{end_str} is:pr"
-                results = list(
-                    self.github.github.search_issues(query=query, sort="created")
-                )
+                results = list(self.github.github.search_issues(query=query, sort="created"))
                 self._github_prs_cache = []
                 for pr in results:
                     pr_date = pr.created_at
@@ -165,24 +158,18 @@ class BackgroundSync:
                 # GITHUB_ORGS: comma-separated list of GitHub org names to search for reviews
                 # e.g. GITHUB_ORGS=mycompany,mycompany-internal
                 github_orgs_env = os.getenv("GITHUB_ORGS", "")
-                github_orgs = [
-                    o.strip() for o in github_orgs_env.split(",") if o.strip()
-                ]
+                github_orgs = [o.strip() for o in github_orgs_env.split(",") if o.strip()]
                 for org in github_orgs:
-                    query = f"reviewed-by:{user_login} org:{org} is:pr updated:{start_str}..{end_str}"
-                    results = self.github.github.search_issues(
-                        query, sort="updated", order="desc"
+                    query = (
+                        f"reviewed-by:{user_login} org:{org} is:pr updated:{start_str}..{end_str}"
                     )
+                    results = self.github.github.search_issues(query, sort="updated", order="desc")
 
                     for pr in results:
                         pr_date = pr.updated_at.date() if pr.updated_at else None
 
                         # Extract repo name from repository_url
-                        repo_name = (
-                            pr.repository_url.split("/")[-1]
-                            if pr.repository_url
-                            else ""
-                        )
+                        repo_name = pr.repository_url.split("/")[-1] if pr.repository_url else ""
                         repo_full = f"{org}/{repo_name}"
 
                         self._github_reviews_cache.append(
@@ -209,9 +196,7 @@ class BackgroundSync:
                 results = self.jira.jira.search_issues(jql, maxResults=500)
                 self._jira_issues_cache = []
                 for issue in results:
-                    updated = (
-                        issue.fields.updated[:10] if issue.fields.updated else None
-                    )
+                    updated = issue.fields.updated[:10] if issue.fields.updated else None
                     self._jira_issues_cache.append(
                         {
                             "date": datetime.strptime(updated, "%Y-%m-%d").date()
@@ -364,9 +349,7 @@ class BackgroundSync:
                 return
 
             total_days = (end_date - start_date).days + 1
-            print(
-                f"Syncing {total_days} days: {start_date} to {end_date} (month by month)"
-            )
+            print(f"Syncing {total_days} days: {start_date} to {end_date} (month by month)")
 
             totals = {"commits": 0, "prs": 0, "reviews": 0, "jira": 0}
 
@@ -377,9 +360,7 @@ class BackgroundSync:
                 if chunk_start.month == 12:
                     chunk_end = date(chunk_start.year + 1, 1, 1) - timedelta(days=1)
                 else:
-                    chunk_end = date(
-                        chunk_start.year, chunk_start.month + 1, 1
-                    ) - timedelta(days=1)
+                    chunk_end = date(chunk_start.year, chunk_start.month + 1, 1) - timedelta(days=1)
                 chunk_end = min(chunk_end, end_date)
                 chunks.append((chunk_start, chunk_end))
                 chunk_start = chunk_end + timedelta(days=1)
@@ -500,8 +481,7 @@ def sync_jira_epics_and_stories(projects: list = None):
 
         # Build epic -> project_id lookup from already-synced epics
         epic_project_map = {
-            e.key: e.project_id
-            for e in db.query(Epic).filter(Epic.project_id.isnot(None)).all()
+            e.key: e.project_id for e in db.query(Epic).filter(Epic.project_id.isnot(None)).all()
         }
 
         # Sync stories as Tasks
@@ -541,9 +521,7 @@ def sync_jira_epics_and_stories(projects: list = None):
                     if project_id:
                         task.project_id = project_id
                 else:
-                    print(
-                        f"    Skipping {story_data['key']} - has pending local changes"
-                    )
+                    print(f"    Skipping {story_data['key']} - has pending local changes")
                 tasks_updated += 1
             else:
                 # Create new task
@@ -612,7 +590,3 @@ def sync_jira_epics_and_stories(projects: list = None):
         db.rollback()
     finally:
         db.close()
-
-
-if __name__ == "__main__":
-    run_background_sync()

@@ -4,25 +4,24 @@ Reports Router
 Unified reports page with calendar navigation for daily/monthly/quarterly views
 """
 
-from fastapi import APIRouter, Depends, Request, Query
+import calendar
+import os
+from datetime import date, datetime, timedelta
+from typing import Optional
+
+import httpx
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-import os
-import httpx
-from datetime import datetime, date, timedelta
-from typing import Optional
-import calendar
 
 from backend.database import get_db
-from backend.services.sync_manager import SyncManager
-from backend.services.github_service import get_gh_cli_token
 from backend.models import DailyActivity, DailySummary
+from backend.services.github_service import get_gh_cli_token
+from backend.services.sync_manager import SyncManager
 
 router = APIRouter(prefix="/reports", tags=["reports"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 # AI provider config
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")  # gemini, ollama
@@ -103,7 +102,8 @@ def get_report_for_quarter(db: Session, year: int, quarter: int) -> dict:
 def get_report_for_year(db: Session, year: int) -> dict:
     """Aggregate all data needed for the yearly recap."""
     from sqlalchemy import extract, func
-    from backend.models import Task, Goal
+
+    from backend.models import Goal, Task
     from backend.routers.goals import calculate_goal_progress
 
     start = datetime(year, 1, 1)
@@ -162,9 +162,7 @@ def get_report_for_year(db: Session, year: int) -> dict:
         == year
     )
 
-    all_tasks = (
-        db.query(Task).filter(Task.status.notin_(cancelled_statuses), year_filter).all()
-    )
+    all_tasks = db.query(Task).filter(Task.status.notin_(cancelled_statuses), year_filter).all()
     done_tasks = [t for t in all_tasks if t.status in done_statuses]
 
     # Tasks by project
@@ -203,9 +201,7 @@ def get_report_for_year(db: Session, year: int) -> dict:
 
     # Goal alignment
     goal_project_ids = list({p.id for g in goals for p in g.projects})
-    aligned_tasks = sum(
-        1 for t in all_tasks if t.project_id and t.project_id in goal_project_ids
-    )
+    aligned_tasks = sum(1 for t in all_tasks if t.project_id and t.project_id in goal_project_ids)
     alignment_pct = round(aligned_tasks / len(all_tasks) * 100) if all_tasks else 0
 
     return {
@@ -218,9 +214,7 @@ def get_report_for_year(db: Session, year: int) -> dict:
         "repos": repos,
         "monthly": monthly,
         "busiest_month": busiest_month[0],
-        "busiest_month_label": calendar.month_name[busiest_month[0]]
-        if busiest_month[0]
-        else "—",
+        "busiest_month_label": calendar.month_name[busiest_month[0]] if busiest_month[0] else "—",
         # Tasks
         "total_tasks": len(all_tasks),
         "done_tasks": len(done_tasks),
@@ -238,9 +232,7 @@ def get_report_for_year(db: Session, year: int) -> dict:
 def _build_report(activities, summary, report_date) -> dict:
     """Build report structure from activities and summary"""
     report = {
-        "date": report_date.isoformat()
-        if hasattr(report_date, "isoformat")
-        else str(report_date),
+        "date": report_date.isoformat() if hasattr(report_date, "isoformat") else str(report_date),
         "github": {"commits": [], "pull_requests": [], "issues": [], "reviews": []},
         "jira": {"assigned_issues": [], "transitions": []},
         "summary": {},
@@ -469,9 +461,7 @@ def get_trend_data(db: Session, view: str, year: int, month: int, quarter: int) 
 
             summaries = (
                 db.query(DailySummary)
-                .filter(
-                    DailySummary.summary_date >= start, DailySummary.summary_date < end
-                )
+                .filter(DailySummary.summary_date >= start, DailySummary.summary_date < end)
                 .all()
             )
 
@@ -516,9 +506,7 @@ def get_trend_data(db: Session, view: str, year: int, month: int, quarter: int) 
 
             summaries = (
                 db.query(DailySummary)
-                .filter(
-                    DailySummary.summary_date >= start, DailySummary.summary_date < end
-                )
+                .filter(DailySummary.summary_date >= start, DailySummary.summary_date < end)
                 .all()
             )
 
@@ -600,9 +588,7 @@ def reports_page(
 
     trend_data = get_trend_data(db, view, year, month, quarter)
 
-    github_configured = (
-        get_gh_cli_token() is not None or os.getenv("GITHUB_TOKEN") is not None
-    )
+    github_configured = get_gh_cli_token() is not None or os.getenv("GITHUB_TOKEN") is not None
     jira_configured = all(
         [os.getenv("JIRA_SERVER"), os.getenv("JIRA_EMAIL"), os.getenv("JIRA_API_TOKEN")]
     )
@@ -662,8 +648,8 @@ def get_report_api(
 def sync_status(db: Session = Depends(get_db)):
     """Check sync state — last synced date and whether a sync is currently running."""
     from backend.services.background_sync import (
-        BackgroundSync,
         DEFAULT_START,
+        BackgroundSync,
         _sync_status,
     )
 
@@ -686,6 +672,7 @@ def sync_status(db: Session = Depends(get_db)):
 async def sync_data(request: Request, db: Session = Depends(get_db)):
     """Full sync - GitHub/Jira daily activity (month-by-month) + Jira epics & tasks"""
     import asyncio
+
     from backend.services.background_sync import (
         BackgroundSync,
         sync_jira_epics_and_stories,
@@ -701,9 +688,7 @@ async def sync_data(request: Request, db: Session = Depends(get_db)):
 
         last_synced = sync.get_last_synced_date()
         activity_msg = (
-            f"Activity synced up to {last_synced}."
-            if last_synced
-            else "Activity sync complete."
+            f"Activity synced up to {last_synced}." if last_synced else "Activity sync complete."
         )
 
         # Sync Jira epics + tasks
@@ -807,9 +792,7 @@ def build_activity_context(
     # For day view: show individual PR titles (small volume, details matter)
     # For month/quarter: show repo-level summary to drive theme-based analysis
     if view == "day":
-        top_repos = sorted(
-            projects.items(), key=lambda x: len(x[1]["prs"]), reverse=True
-        )[:10]
+        top_repos = sorted(projects.items(), key=lambda x: len(x[1]["prs"]), reverse=True)[:10]
         if top_repos:
             lines.append("\nWork breakdown:")
             for repo, data in top_repos:
@@ -874,9 +857,7 @@ async def generate_yearly_recap(
             )
 
     top_projects = list(recap["tasks_by_project"].items())[:5]
-    project_lines = [
-        f"  - {name}: {d['done']}/{d['total']} tasks done" for name, d in top_projects
-    ]
+    project_lines = [f"  - {name}: {d['done']}/{d['total']} tasks done" for name, d in top_projects]
 
     context = f"""Year: {year}
 
@@ -973,7 +954,7 @@ async def generate_ai_summary(
     quarter: Optional[int] = None,
 ):
     """Generate AI summary of work done"""
-    today = datetime.now().date()
+    datetime.now().date()
 
     # Parse date if provided
     target_date = None
@@ -1071,15 +1052,9 @@ Be direct. No filler. Do not list individual PRs."""
         formatted = "\n".join(html_lines)
         # Wrap consecutive li elements in ul
         formatted = formatted.replace("</li>\n<li>", "</li><li>")
+        formatted = formatted.replace("<li>", "<ul><li>", 1) if "<li>" in formatted else formatted
         formatted = (
-            formatted.replace("<li>", "<ul><li>", 1)
-            if "<li>" in formatted
-            else formatted
-        )
-        formatted = (
-            formatted.replace("</li></p>", "</li></ul></p>")
-            if "</li>" in formatted
-            else formatted
+            formatted.replace("</li></p>", "</li></ul></p>") if "</li>" in formatted else formatted
         )
         if formatted.count("<ul>") > formatted.count("</ul>"):
             formatted += "</ul>"

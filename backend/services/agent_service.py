@@ -8,22 +8,23 @@ on behalf of the user. Supports two modes:
 """
 
 import json
-import httpx
 import os
-from typing import List, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List
+
+import httpx
 from sqlalchemy.orm import Session
 
 from backend.models import (
-    Goal,
-    Project,
-    Task,
-    Note,
-    Reminder,
-    MeetingNote,
     ActionItem,
+    Goal,
+    MeetingNote,
+    Note,
+    Project,
+    Reminder,
+    Task,
 )
-from backend.models.models import GoalStatus, ProjectStatus, Priority
+from backend.models.models import GoalStatus, Priority, ProjectStatus
 
 # Gemini API configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -445,8 +446,9 @@ class ActionExecutor:
         # If this is a Jira task, sync the status change to Jira immediately
         if task.jira_key:
             try:
-                from backend.services.jira_service import JiraService
                 import os
+
+                from backend.services.jira_service import JiraService
 
                 jira_server = os.getenv("JIRA_SERVER")
                 jira_email = os.getenv("JIRA_EMAIL")
@@ -597,9 +599,7 @@ class ActionExecutor:
     def _action_add_action_item(
         self, meeting_id: int, description: str, owner: str = "", due_date: str = ""
     ) -> Dict:
-        meeting = (
-            self.db.query(MeetingNote).filter(MeetingNote.id == meeting_id).first()
-        )
+        meeting = self.db.query(MeetingNote).filter(MeetingNote.id == meeting_id).first()
         if not meeting:
             return {"success": False, "error": f"Meeting {meeting_id} not found"}
         item = ActionItem(
@@ -648,12 +648,10 @@ class ActionExecutor:
             "count": len(tasks),
         }
 
-    def _action_list_reminders(
-        self, include_done: bool = False, project_id: int = None
-    ) -> Dict:
+    def _action_list_reminders(self, include_done: bool = False, project_id: int = None) -> Dict:
         query = self.db.query(Reminder)
         if not include_done:
-            query = query.filter(Reminder.is_done == False)
+            query = query.filter(not Reminder.is_done)
         if project_id:
             query = query.filter(Reminder.project_id == project_id)
         reminders = query.order_by(Reminder.due_at).limit(20).all()
@@ -885,9 +883,7 @@ If the request is unclear or you cannot fulfill it, respond with:
             "plan": None,
         }
 
-    async def _process_execute_response(
-        self, response: Dict, original_request: str
-    ) -> Dict:
+    async def _process_execute_response(self, response: Dict, original_request: str) -> Dict:
         """Process the AI response in execute mode and run actions"""
         text = response.get("text", "")
 

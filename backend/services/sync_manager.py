@@ -5,8 +5,10 @@ Manages incremental syncing by tracking last sync time for each source
 """
 
 from datetime import datetime
+from typing import Dict, Optional
+
 from sqlalchemy.orm import Session
-from typing import Optional, Dict
+
 from backend.models import SyncState
 
 # Default start date for first-time sync (January 1, 2026)
@@ -63,9 +65,7 @@ class SyncManager:
             # First time sync - fetch from default start date (Jan 1, 2026)
             return DEFAULT_SYNC_START
 
-    def update_sync_state(
-        self, source: str, success: bool = True, error: str = ""
-    ) -> None:
+    def update_sync_state(self, source: str, success: bool = True, error: str = "") -> None:
         """
         Update sync state after a sync attempt
 

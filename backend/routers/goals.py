@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+from datetime import date
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
-from typing import Optional, List
-from datetime import date
 from pydantic import BaseModel
-import os
+from sqlalchemy.orm import Session, joinedload
 
 from backend.database import get_db
 from backend.models import Goal, Project, Task
@@ -49,9 +50,7 @@ def calculate_goal_progress(goal: Goal, db: Session) -> tuple[int, int, int]:
     return pct, done, total
 
 
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 # ── Pydantic models for JSON API ──────────────────────────────────────────────
@@ -90,9 +89,7 @@ def _goal_to_dict(goal: Goal) -> dict:
         "target_date": goal.target_date.isoformat() if goal.target_date else None,
         "status": goal.status.value if goal.status else "active",
         "progress_pct": goal.progress_pct,
-        "projects": [{"id": p.id, "name": p.name} for p in goal.projects]
-        if goal.projects
-        else [],
+        "projects": [{"id": p.id, "name": p.name} for p in goal.projects] if goal.projects else [],
         "created_at": goal.created_at.isoformat() if goal.created_at else None,
         "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
     }
@@ -136,16 +133,9 @@ def get_goal_api(
     db: Session = Depends(get_db),
 ):
     """Get a single goal by ID."""
-    goal = (
-        db.query(Goal)
-        .options(joinedload(Goal.projects))
-        .filter(Goal.id == goal_id)
-        .first()
-    )
+    goal = db.query(Goal).options(joinedload(Goal.projects)).filter(Goal.id == goal_id).first()
     if not goal:
-        return JSONResponse(
-            {"success": False, "error": "Goal not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Goal not found"}, status_code=404)
 
     return {"success": True, "goal": _goal_to_dict(goal)}
 
@@ -173,9 +163,7 @@ def create_goal_api(
         title=goal_data.title,
         description=goal_data.description,
         year=goal_data.year if goal_data.year else get_current_year(),
-        target_date=date.fromisoformat(goal_data.target_date)
-        if goal_data.target_date
-        else None,
+        target_date=date.fromisoformat(goal_data.target_date) if goal_data.target_date else None,
         status=GoalStatus(goal_data.status) if goal_data.status else GoalStatus.active,
         progress_pct=max(0, min(100, goal_data.progress_pct)),
     )
@@ -202,16 +190,9 @@ def update_goal_api(
 
     Only provided fields will be updated.
     """
-    goal = (
-        db.query(Goal)
-        .options(joinedload(Goal.projects))
-        .filter(Goal.id == goal_id)
-        .first()
-    )
+    goal = db.query(Goal).options(joinedload(Goal.projects)).filter(Goal.id == goal_id).first()
     if not goal:
-        return JSONResponse(
-            {"success": False, "error": "Goal not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Goal not found"}, status_code=404)
 
     if goal_data.title is not None:
         goal.title = goal_data.title
@@ -242,9 +223,7 @@ def delete_goal_api(
     """Delete a goal by ID."""
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if not goal:
-        return JSONResponse(
-            {"success": False, "error": "Goal not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Goal not found"}, status_code=404)
 
     db.delete(goal)
     db.commit()
@@ -261,9 +240,7 @@ def update_goal_progress_api(
     """Update goal progress percentage (0-100)."""
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if not goal:
-        return JSONResponse(
-            {"success": False, "error": "Goal not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Goal not found"}, status_code=404)
 
     goal.progress_pct = max(0, min(100, progress_pct))
     db.commit()
@@ -278,22 +255,13 @@ def link_project_to_goal_api(
     db: Session = Depends(get_db),
 ):
     """Link a project to a goal."""
-    goal = (
-        db.query(Goal)
-        .options(joinedload(Goal.projects))
-        .filter(Goal.id == goal_id)
-        .first()
-    )
+    goal = db.query(Goal).options(joinedload(Goal.projects)).filter(Goal.id == goal_id).first()
     if not goal:
-        return JSONResponse(
-            {"success": False, "error": "Goal not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Goal not found"}, status_code=404)
 
     project = db.query(Project).filter(Project.id == link_data.project_id).first()
     if not project:
-        return JSONResponse(
-            {"success": False, "error": "Project not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Project not found"}, status_code=404)
 
     if project not in goal.projects:
         goal.projects.append(project)
@@ -302,25 +270,16 @@ def link_project_to_goal_api(
     return {"success": True, "goal": _goal_to_dict(goal)}
 
 
-@router.delete(
-    "/api/{goal_id}/unlink-project/{project_id}", response_class=JSONResponse
-)
+@router.delete("/api/{goal_id}/unlink-project/{project_id}", response_class=JSONResponse)
 def unlink_project_from_goal_api(
     goal_id: int,
     project_id: int,
     db: Session = Depends(get_db),
 ):
     """Unlink a project from a goal."""
-    goal = (
-        db.query(Goal)
-        .options(joinedload(Goal.projects))
-        .filter(Goal.id == goal_id)
-        .first()
-    )
+    goal = db.query(Goal).options(joinedload(Goal.projects)).filter(Goal.id == goal_id).first()
     if not goal:
-        return JSONResponse(
-            {"success": False, "error": "Goal not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Goal not found"}, status_code=404)
 
     project = db.query(Project).filter(Project.id == project_id).first()
     if project and project in goal.projects:
@@ -368,9 +327,7 @@ def list_goals(
     total_goals = len(goals)
     achieved_goals = len(goals_by_status["achieved"])
     active_goals = len(goals_by_status["active"])
-    avg_progress = (
-        sum(g.progress_pct for g in goals) / total_goals if total_goals > 0 else 0
-    )
+    avg_progress = sum(g.progress_pct for g in goals) / total_goals if total_goals > 0 else 0
 
     # Get available years from database
     years_query = db.query(Goal.year).filter(Goal.year.isnot(None)).distinct().all()
@@ -391,9 +348,7 @@ def list_goals(
         goal_progress[g.id] = {"pct": pct, "done": done, "total": total}
 
     avg_progress = (
-        sum(v["pct"] for v in goal_progress.values()) / total_goals
-        if total_goals > 0
-        else 0
+        sum(v["pct"] for v in goal_progress.values()) / total_goals if total_goals > 0 else 0
     )
 
     # Goal alignment: % of ALL tasks this year (todo/in-progress/done) in projects linked to a goal
@@ -401,7 +356,7 @@ def list_goals(
     # Uses jira_updated_at (actual Jira timestamp) for synced tasks,
     # falling back to updated_at for manually created tasks.
     cancelled_statuses = ["cancelled", "Cancelled"]
-    from sqlalchemy import extract, case
+    from sqlalchemy import case, extract
 
     year_filter = (
         extract(
@@ -415,9 +370,7 @@ def list_goals(
     )
 
     all_year_tasks = (
-        db.query(Task)
-        .filter(Task.status.notin_(cancelled_statuses), year_filter)
-        .count()
+        db.query(Task).filter(Task.status.notin_(cancelled_statuses), year_filter).count()
     )
     goal_project_ids = list({p.id for g in goals for p in g.projects})
     aligned_tasks = (
@@ -432,9 +385,7 @@ def list_goals(
         else 0
     )
     unaligned_tasks = all_year_tasks - aligned_tasks
-    alignment_pct = (
-        round(aligned_tasks / all_year_tasks * 100) if all_year_tasks > 0 else 0
-    )
+    alignment_pct = round(aligned_tasks / all_year_tasks * 100) if all_year_tasks > 0 else 0
 
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "goals/list_content.html" if is_htmx else "goals/list.html"
@@ -561,12 +512,7 @@ def get_goal(goal_id: int, request: Request, db: Session = Depends(get_db)):
 @router.get("/{goal_id}/edit", response_class=HTMLResponse)
 def edit_goal_form(goal_id: int, request: Request, db: Session = Depends(get_db)):
     """Show form to edit a goal"""
-    goal = (
-        db.query(Goal)
-        .options(joinedload(Goal.projects))
-        .filter(Goal.id == goal_id)
-        .first()
-    )
+    goal = db.query(Goal).options(joinedload(Goal.projects)).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
@@ -668,12 +614,7 @@ def link_project(
     db: Session = Depends(get_db),
 ):
     """Link a project to a goal"""
-    goal = (
-        db.query(Goal)
-        .options(joinedload(Goal.projects))
-        .filter(Goal.id == goal_id)
-        .first()
-    )
+    goal = db.query(Goal).options(joinedload(Goal.projects)).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
@@ -700,12 +641,7 @@ def unlink_project(
     db: Session = Depends(get_db),
 ):
     """Unlink a project from a goal"""
-    goal = (
-        db.query(Goal)
-        .options(joinedload(Goal.projects))
-        .filter(Goal.id == goal_id)
-        .first()
-    )
+    goal = db.query(Goal).options(joinedload(Goal.projects)).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 

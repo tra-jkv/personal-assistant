@@ -1,18 +1,19 @@
+import enum
+from datetime import datetime, timezone
+
 from sqlalchemy import (
+    Boolean,
     Column,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
     Integer,
     String,
-    Text,
-    DateTime,
-    Boolean,
-    ForeignKey,
-    Enum,
     Table,
-    Date,
+    Text,
 )
 from sqlalchemy.orm import relationship
-from datetime import datetime, timezone
-import enum
 
 from backend.database import Base
 
@@ -63,9 +64,7 @@ def utcnow():
 goal_project = Table(
     "goal_project",
     Base.metadata,
-    Column(
-        "goal_id", Integer, ForeignKey("goals.id", ondelete="CASCADE"), primary_key=True
-    ),
+    Column("goal_id", Integer, ForeignKey("goals.id", ondelete="CASCADE"), primary_key=True),
     Column(
         "project_id",
         Integer,
@@ -117,9 +116,7 @@ class Project(Base):
     tasks = relationship("Task", back_populates="project", order_by="Task.position")
 
     notes = relationship("Note", back_populates="project", cascade="all, delete-orphan")
-    reminders = relationship(
-        "Reminder", back_populates="project", cascade="all, delete-orphan"
-    )
+    reminders = relationship("Reminder", back_populates="project", cascade="all, delete-orphan")
     meeting_notes = relationship(
         "MeetingNote", back_populates="project", cascade="all, delete-orphan"
     )
@@ -145,9 +142,7 @@ class Epic(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     # Foreign key to Project (one-to-many: Project has many Epics)
-    project_id = Column(
-        Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
-    )
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
 
     # Many-to-one relationship with Project
     project = relationship("Project", back_populates="epics")
@@ -183,9 +178,7 @@ class Task(Base):
     due_date = Column(Date, nullable=True)
 
     # Jira integration
-    jira_key = Column(
-        String(50), nullable=True, unique=True, index=True
-    )  # e.g., "DL-1235"
+    jira_key = Column(String(50), nullable=True, unique=True, index=True)  # e.g., "DL-1235"
     jira_url = Column(String(500), default="")
     jira_status = Column(String(100), default="")  # Original Jira status for sync-back
 
@@ -198,19 +191,13 @@ class Task(Base):
     subtasks_json = Column(Text, default="")
 
     # Relationships
-    epic_key = Column(
-        String(50), ForeignKey("epics.key", ondelete="SET NULL"), nullable=True
-    )
-    project_id = Column(
-        Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
-    )
+    epic_key = Column(String(50), ForeignKey("epics.key", ondelete="SET NULL"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
 
     # Sync tracking
     is_synced = Column(Boolean, default=False)  # True if synced from Jira
     last_synced = Column(DateTime, nullable=True)
-    jira_updated_at = Column(
-        DateTime, nullable=True
-    )  # Actual last-updated time from Jira
+    jira_updated_at = Column(DateTime, nullable=True)  # Actual last-updated time from Jira
     needs_sync_back = Column(
         Boolean, default=False
     )  # True if local changes need to be pushed to Jira
@@ -242,9 +229,7 @@ class Note(Base):
     content = Column(Text, default="")
     tags = Column(String(500), default="")  # comma-separated
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
-    task_id = Column(
-        Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
-    )
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -268,9 +253,7 @@ class Reminder(Base):
     is_done = Column(Boolean, default=False)
     priority = Column(Enum(Priority), default=Priority.medium)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
-    task_id = Column(
-        Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
-    )
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
     project = relationship("Project", back_populates="reminders")
@@ -337,13 +320,9 @@ class ExternalLink(Base):
     link_type = Column(Enum(LinkType), default=LinkType.other)
     description = Column(Text, default="")
     # Optional associations — at most one of these is set
-    project_id = Column(
-        Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
-    )
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
     note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=True)
-    meeting_id = Column(
-        Integer, ForeignKey("meeting_notes.id", ondelete="CASCADE"), nullable=True
-    )
+    meeting_id = Column(Integer, ForeignKey("meeting_notes.id", ondelete="CASCADE"), nullable=True)
     task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
@@ -359,9 +338,7 @@ class SyncState(Base):
     __tablename__ = "sync_state"
 
     id = Column(Integer, primary_key=True, index=True)
-    source = Column(
-        String(50), unique=True, nullable=False, index=True
-    )  # 'github' or 'jira'
+    source = Column(String(50), unique=True, nullable=False, index=True)  # 'github' or 'jira'
     last_sync_at = Column(DateTime, nullable=False)
     last_sync_success = Column(Boolean, default=True)
     last_sync_error = Column(Text, default="")

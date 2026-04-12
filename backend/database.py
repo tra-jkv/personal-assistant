@@ -1,6 +1,7 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "assistant.db")
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)

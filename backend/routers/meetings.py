@@ -1,20 +1,19 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+from datetime import date
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from typing import Optional
-from datetime import date
 from pydantic import BaseModel
-import os
+from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import MeetingNote, ActionItem, Project, ExternalLink
+from backend.models import ActionItem, ExternalLink, MeetingNote, Project
 from backend.models.models import LinkType
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 # ── Pydantic models for JSON API ──────────────────────────────────────────────
@@ -105,9 +104,7 @@ def get_meeting_api(
     """Get a single meeting by ID with action items."""
     meeting = db.query(MeetingNote).filter(MeetingNote.id == meeting_id).first()
     if not meeting:
-        return JSONResponse(
-            {"success": False, "error": "Meeting not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Meeting not found"}, status_code=404)
 
     return {"success": True, "meeting": _meeting_to_dict(meeting)}
 
@@ -154,9 +151,7 @@ def update_meeting_api(
     """Update an existing meeting. Only provided fields will be updated."""
     meeting = db.query(MeetingNote).filter(MeetingNote.id == meeting_id).first()
     if not meeting:
-        return JSONResponse(
-            {"success": False, "error": "Meeting not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Meeting not found"}, status_code=404)
 
     if meeting_data.title is not None:
         meeting.title = meeting_data.title
@@ -169,9 +164,7 @@ def update_meeting_api(
     if meeting_data.notes is not None:
         meeting.notes = meeting_data.notes
     if meeting_data.project_id is not None:
-        meeting.project_id = (
-            meeting_data.project_id if meeting_data.project_id else None
-        )
+        meeting.project_id = meeting_data.project_id if meeting_data.project_id else None
 
     db.commit()
     db.refresh(meeting)
@@ -187,9 +180,7 @@ def delete_meeting_api(
     """Delete a meeting by ID."""
     meeting = db.query(MeetingNote).filter(MeetingNote.id == meeting_id).first()
     if not meeting:
-        return JSONResponse(
-            {"success": False, "error": "Meeting not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Meeting not found"}, status_code=404)
 
     db.delete(meeting)
     db.commit()
@@ -215,9 +206,7 @@ def add_action_item_api(
     """
     meeting = db.query(MeetingNote).filter(MeetingNote.id == meeting_id).first()
     if not meeting:
-        return JSONResponse(
-            {"success": False, "error": "Meeting not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Meeting not found"}, status_code=404)
 
     item = ActionItem(
         description=item_data.description,
@@ -256,9 +245,7 @@ def update_action_item_api(
         .first()
     )
     if not item:
-        return JSONResponse(
-            {"success": False, "error": "Action item not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Action item not found"}, status_code=404)
 
     if item_data.description is not None:
         item.description = item_data.description
@@ -284,9 +271,7 @@ def update_action_item_api(
     }
 
 
-@router.post(
-    "/api/{meeting_id}/action-items/{item_id}/toggle", response_class=JSONResponse
-)
+@router.post("/api/{meeting_id}/action-items/{item_id}/toggle", response_class=JSONResponse)
 def toggle_action_item_api(
     meeting_id: int,
     item_id: int,
@@ -299,9 +284,7 @@ def toggle_action_item_api(
         .first()
     )
     if not item:
-        return JSONResponse(
-            {"success": False, "error": "Action item not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Action item not found"}, status_code=404)
 
     item.is_done = not item.is_done
     db.commit()
@@ -328,9 +311,7 @@ def delete_action_item_api(
         .first()
     )
     if not item:
-        return JSONResponse(
-            {"success": False, "error": "Action item not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Action item not found"}, status_code=404)
 
     db.delete(item)
     db.commit()

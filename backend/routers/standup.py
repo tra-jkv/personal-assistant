@@ -1,17 +1,16 @@
-from fastapi import APIRouter, Depends, Request, Form
+import os
+from datetime import date
+
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from datetime import date
-import os
 
 from backend.database import get_db
 from backend.models import StandupLog
 
 router = APIRouter(prefix="/standup", tags=["standup"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 def _render(request, db, saved=False):

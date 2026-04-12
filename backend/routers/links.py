@@ -1,18 +1,17 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from typing import Optional
-import os
 
 from backend.database import get_db
-from backend.models import ExternalLink, Project, Note, MeetingNote, Task
+from backend.models import ExternalLink, MeetingNote, Note, Project, Task
 from backend.models.models import LinkType
 
 router = APIRouter(prefix="/links", tags=["links"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 # ── Standalone links list ─────────────────────────────────────────────────────
@@ -166,21 +165,15 @@ def delete_link(
 
 
 def _project_detail(request: Request, project_id: int, db: Session) -> HTMLResponse:
-    from backend.models import Note, Reminder, MeetingNote
-    from backend.models.models import ProjectStatus, Priority
+    from backend.models import MeetingNote, Note, Reminder
+    from backend.models.models import Priority, ProjectStatus
 
     project = db.query(Project).filter(Project.id == project_id).first()
     notes = (
-        db.query(Note)
-        .filter(Note.project_id == project_id)
-        .order_by(Note.updated_at.desc())
-        .all()
+        db.query(Note).filter(Note.project_id == project_id).order_by(Note.updated_at.desc()).all()
     )
     reminders = (
-        db.query(Reminder)
-        .filter(Reminder.project_id == project_id)
-        .order_by(Reminder.due_at)
-        .all()
+        db.query(Reminder).filter(Reminder.project_id == project_id).order_by(Reminder.due_at).all()
     )
     meetings = (
         db.query(MeetingNote)

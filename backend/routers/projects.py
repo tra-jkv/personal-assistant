@@ -1,27 +1,26 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
-from typing import Optional, List
 from pydantic import BaseModel
-import os
+from sqlalchemy.orm import Session, joinedload
 
 from backend.database import get_db
 from backend.models import (
-    Project,
-    Note,
-    Reminder,
-    MeetingNote,
+    Epic,
     ExternalLink,
     Goal,
-    Epic,
+    MeetingNote,
+    Note,
+    Project,
+    Reminder,
 )
-from backend.models.models import ProjectStatus, Priority, LinkType, GoalStatus
+from backend.models.models import GoalStatus, LinkType, Priority, ProjectStatus
 
 router = APIRouter(prefix="/projects", tags=["projects"])
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "..", "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 # ── Pydantic models for JSON API ──────────────────────────────────────────────
@@ -65,12 +64,8 @@ def _project_to_dict(project: Project) -> dict:
         "priority": project.priority.value if project.priority else "medium",
         "start_date": project.start_date.isoformat() if project.start_date else None,
         "end_date": project.end_date.isoformat() if project.end_date else None,
-        "goals": [{"id": g.id, "title": g.title} for g in project.goals]
-        if project.goals
-        else [],
-        "epics": [{"key": e.key, "title": e.title} for e in project.epics]
-        if project.epics
-        else [],
+        "goals": [{"id": g.id, "title": g.title} for g in project.goals] if project.goals else [],
+        "epics": [{"key": e.key, "title": e.title} for e in project.epics] if project.epics else [],
         "created_at": project.created_at.isoformat() if project.created_at else None,
         "updated_at": project.updated_at.isoformat() if project.updated_at else None,
     }
@@ -92,9 +87,7 @@ def list_projects_api(
     - status: Filter by status (active, paused, completed, archived)
     - priority: Filter by priority (low, medium, high, critical)
     """
-    query = db.query(Project).options(
-        joinedload(Project.goals), joinedload(Project.epics)
-    )
+    query = db.query(Project).options(joinedload(Project.goals), joinedload(Project.epics))
 
     if status:
         try:
@@ -126,9 +119,7 @@ def get_project_api(
         .first()
     )
     if not project:
-        return JSONResponse(
-            {"success": False, "error": "Project not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Project not found"}, status_code=404)
 
     return {"success": True, "project": _project_to_dict(project)}
 
@@ -158,18 +149,10 @@ def create_project_api(
     project = Project(
         name=project_data.name,
         description=project_data.description,
-        status=ProjectStatus(project_data.status)
-        if project_data.status
-        else ProjectStatus.active,
-        priority=Priority(project_data.priority)
-        if project_data.priority
-        else Priority.medium,
-        start_date=date.fromisoformat(project_data.start_date)
-        if project_data.start_date
-        else None,
-        end_date=date.fromisoformat(project_data.end_date)
-        if project_data.end_date
-        else None,
+        status=ProjectStatus(project_data.status) if project_data.status else ProjectStatus.active,
+        priority=Priority(project_data.priority) if project_data.priority else Priority.medium,
+        start_date=date.fromisoformat(project_data.start_date) if project_data.start_date else None,
+        end_date=date.fromisoformat(project_data.end_date) if project_data.end_date else None,
     )
 
     if project_data.goal_ids:
@@ -205,9 +188,7 @@ def update_project_api(
         .first()
     )
     if not project:
-        return JSONResponse(
-            {"success": False, "error": "Project not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Project not found"}, status_code=404)
 
     if project_data.name is not None:
         project.name = project_data.name
@@ -219,9 +200,7 @@ def update_project_api(
         project.priority = Priority(project_data.priority)
     if project_data.start_date is not None:
         project.start_date = (
-            date.fromisoformat(project_data.start_date)
-            if project_data.start_date
-            else None
+            date.fromisoformat(project_data.start_date) if project_data.start_date else None
         )
     if project_data.end_date is not None:
         project.end_date = (
@@ -242,9 +221,7 @@ def delete_project_api(
     """Delete a project by ID."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        return JSONResponse(
-            {"success": False, "error": "Project not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Project not found"}, status_code=404)
 
     db.delete(project)
     db.commit()
@@ -266,15 +243,11 @@ def link_goal_to_project_api(
         .first()
     )
     if not project:
-        return JSONResponse(
-            {"success": False, "error": "Project not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Project not found"}, status_code=404)
 
     goal = db.query(Goal).filter(Goal.id == link_data.goal_id).first()
     if not goal:
-        return JSONResponse(
-            {"success": False, "error": "Goal not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Goal not found"}, status_code=404)
 
     if goal not in project.goals:
         project.goals.append(goal)
@@ -297,9 +270,7 @@ def unlink_goal_from_project_api(
         .first()
     )
     if not project:
-        return JSONResponse(
-            {"success": False, "error": "Project not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Project not found"}, status_code=404)
 
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if goal and goal in project.goals:
@@ -323,15 +294,11 @@ def link_epic_to_project_api(
         .first()
     )
     if not project:
-        return JSONResponse(
-            {"success": False, "error": "Project not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Project not found"}, status_code=404)
 
     epic = db.query(Epic).filter(Epic.key == link_data.epic_key).first()
     if not epic:
-        return JSONResponse(
-            {"success": False, "error": "Epic not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Epic not found"}, status_code=404)
 
     # One-to-many: set the epic's project_id
     epic.project_id = project.id
@@ -354,9 +321,7 @@ def unlink_epic_from_project_api(
         .first()
     )
     if not project:
-        return JSONResponse(
-            {"success": False, "error": "Project not found"}, status_code=404
-        )
+        return JSONResponse({"success": False, "error": "Project not found"}, status_code=404)
 
     epic = db.query(Epic).filter(Epic.key == epic_key).first()
     if epic and epic.project_id == project_id:
@@ -434,16 +399,12 @@ def create_project(
     priority: Priority = Form(Priority.medium),
     db: Session = Depends(get_db),
 ):
-    project = Project(
-        name=name, description=description, status=status, priority=priority
-    )
+    project = Project(name=name, description=description, status=status, priority=priority)
     db.add(project)
     db.commit()
     db.refresh(project)
     projects = db.query(Project).order_by(Project.updated_at.desc()).all()
-    return templates.TemplateResponse(
-        request, "projects/list.html", {"projects": projects}
-    )
+    return templates.TemplateResponse(request, "projects/list.html", {"projects": projects})
 
 
 @router.get("/{project_id}", response_class=HTMLResponse)
@@ -460,16 +421,10 @@ def get_project(project_id: int, request: Request, db: Session = Depends(get_db)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     notes = (
-        db.query(Note)
-        .filter(Note.project_id == project_id)
-        .order_by(Note.updated_at.desc())
-        .all()
+        db.query(Note).filter(Note.project_id == project_id).order_by(Note.updated_at.desc()).all()
     )
     reminders = (
-        db.query(Reminder)
-        .filter(Reminder.project_id == project_id)
-        .order_by(Reminder.due_at)
-        .all()
+        db.query(Reminder).filter(Reminder.project_id == project_id).order_by(Reminder.due_at).all()
     )
     meetings = (
         db.query(MeetingNote)
@@ -531,16 +486,10 @@ def edit_project(
     db.commit()
     db.refresh(project)
     notes = (
-        db.query(Note)
-        .filter(Note.project_id == project_id)
-        .order_by(Note.updated_at.desc())
-        .all()
+        db.query(Note).filter(Note.project_id == project_id).order_by(Note.updated_at.desc()).all()
     )
     reminders = (
-        db.query(Reminder)
-        .filter(Reminder.project_id == project_id)
-        .order_by(Reminder.due_at)
-        .all()
+        db.query(Reminder).filter(Reminder.project_id == project_id).order_by(Reminder.due_at).all()
     )
     meetings = (
         db.query(MeetingNote)
@@ -577,9 +526,7 @@ def delete_project(project_id: int, request: Request, db: Session = Depends(get_
         db.delete(project)
         db.commit()
     projects = db.query(Project).order_by(Project.updated_at.desc()).all()
-    return templates.TemplateResponse(
-        request, "projects/list.html", {"projects": projects}
-    )
+    return templates.TemplateResponse(request, "projects/list.html", {"projects": projects})
 
 
 @router.post("/{project_id}/link-goal", response_class=HTMLResponse)

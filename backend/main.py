@@ -1,33 +1,34 @@
+import os
+import threading
 from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
+
+import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from datetime import datetime, date, timedelta
-import threading
-import httpx
-import os
-from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
-from backend.database import engine, SessionLocal  # noqa: E402
+from backend.database import SessionLocal, engine  # noqa: E402
 from backend.models.models import Base  # noqa: E402
 from backend.routers import (  # noqa: E402
-    projects,
-    notes,
-    reminders,
-    standup,
-    meetings,
     ai,
-    links,
-    tasks,
     daily_report,
-    period_reports,
-    reports,
-    goals,
     epics,
+    goals,
+    links,
+    meetings,
+    notes,
+    period_reports,
+    projects,
+    reminders,
+    reports,
+    standup,
+    tasks,
 )
 
 # Create all tables
@@ -48,9 +49,7 @@ def _run_startup_sync():
         today = date.today()
 
         if last_synced and last_synced >= today:
-            print(
-                "[startup sync] Activity already up to date — skipping activity sync."
-            )
+            print("[startup sync] Activity already up to date — skipping activity sync.")
         else:
             print("[startup sync] Starting activity sync...")
             sync.run_full_sync(end_date=today)
@@ -114,9 +113,7 @@ HTML endpoints (without `/api`) return rendered HTML for the web UI.
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 # Include routers
 app.include_router(projects.router)
@@ -137,17 +134,15 @@ app.include_router(epics.router)
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     from backend.database import SessionLocal
-    from backend.models import Project, Reminder, Goal, Task
-    from backend.models.models import ProjectStatus, GoalStatus, TaskStatus
+    from backend.models import Goal, Project, Reminder, Task
+    from backend.models.models import GoalStatus, ProjectStatus, TaskStatus
 
     db = SessionLocal()
     try:
         now = datetime.utcnow()
 
         # Projects
-        active_projects = (
-            db.query(Project).filter(Project.status == ProjectStatus.active).count()
-        )
+        active_projects = db.query(Project).filter(Project.status == ProjectStatus.active).count()
         recent_projects = (
             db.query(Project)
             .filter(Project.status == ProjectStatus.active)
@@ -176,6 +171,7 @@ def dashboard(request: Request):
 
         # Goals (eager-load projects to avoid DetachedInstanceError)
         from sqlalchemy.orm import joinedload
+
         from backend.routers.goals import calculate_goal_progress
 
         active_goals = (
@@ -235,17 +231,16 @@ def dashboard(request: Request):
 @app.get("/dashboard/briefing", response_class=HTMLResponse)
 async def dashboard_briefing(request: Request):
     """AI daily briefing — called via HTMX on dashboard load."""
+    from sqlalchemy.orm import joinedload
+
     from backend.database import SessionLocal
-    from backend.models import Reminder, Goal, Task, DailyActivity
+    from backend.models import DailyActivity, Goal, Reminder, Task
     from backend.models.models import GoalStatus, TaskStatus
     from backend.routers.goals import calculate_goal_progress
-    from sqlalchemy.orm import joinedload
 
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     USER_NAME = (
-        os.getenv("USER_DISPLAY_NAME", "").split()[0]
-        if os.getenv("USER_DISPLAY_NAME")
-        else "there"
+        os.getenv("USER_DISPLAY_NAME", "").split()[0] if os.getenv("USER_DISPLAY_NAME") else "there"
     )
 
     if not GEMINI_API_KEY:
@@ -357,9 +352,7 @@ async def dashboard_briefing(request: Request):
             lines.append(f"  - {r.title} (due {r.due_at.strftime('%b %d')})")
 
     if commits_today or prs_today:
-        lines.append(
-            f"\nGitHub activity today: {commits_today} commits, {prs_today} PRs."
-        )
+        lines.append(f"\nGitHub activity today: {commits_today} commits, {prs_today} PRs.")
 
     context = "\n".join(lines)
 
@@ -381,9 +374,7 @@ Then give 2-4 bullet points of the most important things to act on today — pri
                 },
             )
             response.raise_for_status()
-            text = response.json()["candidates"][0]["content"]["parts"][0][
-                "text"
-            ].strip()
+            text = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
 
         # Simple markdown → HTML
         html_parts = []
