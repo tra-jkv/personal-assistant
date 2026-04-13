@@ -404,7 +404,9 @@ def create_project(
     db.commit()
     db.refresh(project)
     projects = db.query(Project).order_by(Project.updated_at.desc()).all()
-    return templates.TemplateResponse(request, "projects/list.html", {"projects": projects})
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "projects/list_content.html" if is_htmx else "projects/list.html"
+    return templates.TemplateResponse(request, template, {"projects": projects})
 
 
 @router.get("/{project_id}", response_class=HTMLResponse)
@@ -503,15 +505,26 @@ def edit_project(
         .order_by(ExternalLink.created_at.desc())
         .all()
     )
+    all_goals = (
+        db.query(Goal)
+        .filter(Goal.status != GoalStatus.cancelled)
+        .order_by(Goal.year.desc(), Goal.title)
+        .all()
+    )
+    all_epics = db.query(Epic).order_by(Epic.key).all()
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "projects/detail_content.html" if is_htmx else "projects/detail.html"
     return templates.TemplateResponse(
         request,
-        "projects/detail.html",
+        template,
         {
             "project": project,
             "notes": notes,
             "reminders": reminders,
             "meetings": meetings,
             "links": links,
+            "all_goals": all_goals,
+            "all_epics": all_epics,
             "statuses": list(ProjectStatus),
             "priorities": list(Priority),
             "link_types": list(LinkType),
@@ -526,7 +539,9 @@ def delete_project(project_id: int, request: Request, db: Session = Depends(get_
         db.delete(project)
         db.commit()
     projects = db.query(Project).order_by(Project.updated_at.desc()).all()
-    return templates.TemplateResponse(request, "projects/list.html", {"projects": projects})
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "projects/list_content.html" if is_htmx else "projects/list.html"
+    return templates.TemplateResponse(request, template, {"projects": projects})
 
 
 @router.post("/{project_id}/link-goal", response_class=HTMLResponse)

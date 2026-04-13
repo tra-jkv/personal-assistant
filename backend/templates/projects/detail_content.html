@@ -1,0 +1,240 @@
+<div class="grid" style="grid-template-columns: 2fr 1fr; gap: 24px;">
+  <!-- Main content -->
+  <div>
+    <!-- Edit form -->
+    <div class="card">
+      <details>
+        <summary style="cursor:pointer;font-weight:600;color:var(--muted);font-size:.85rem;list-style:none">
+          Edit project details
+        </summary>
+        <form method="post" action="/projects/{{ project.id }}/edit"
+              hx-post="/projects/{{ project.id }}/edit" hx-target="#main-content" hx-swap="innerHTML"
+              style="margin-top:16px">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" name="name" value="{{ project.name }}" required />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea name="description">{{ project.description }}</textarea>
+          </div>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label>Status</label>
+              <select name="status">
+                {% for s in statuses %}
+                <option value="{{ s.value }}" {{ 'selected' if s == project.status }}>{{ s.value|capitalize }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Priority</label>
+              <select name="priority">
+                {% for p in priorities %}
+                <option value="{{ p.value }}" {{ 'selected' if p == project.priority }}>{{ p.value|capitalize }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">Save changes</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Linked Goals -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Linked Goals</span>
+      </div>
+      <div id="linked-goals">
+        {% include "projects/linked_goals.html" %}
+      </div>
+      <form class="flex gap-2 mt-3" hx-post="/projects/{{ project.id }}/link-goal" hx-target="#linked-goals" hx-swap="innerHTML">
+        <select name="goal_id" style="flex:1">
+          <option value="">Select a goal to link...</option>
+          {% set linked_goal_ids = project.goals|map(attribute='id')|list %}
+          {% for g in all_goals if g.id not in linked_goal_ids %}
+          <option value="{{ g.id }}">{{ g.title }}{% if g.quarter %} ({{ g.quarter }}){% endif %}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-primary">Link</button>
+      </form>
+    </div>
+
+    <!-- Linked Epics -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Jira Epics</span>
+      </div>
+      <div id="linked-epics">
+        {% include "projects/linked_epics.html" %}
+      </div>
+      {% if all_epics %}
+      <form class="flex gap-2 mt-3" hx-post="/projects/{{ project.id }}/link-epic" hx-target="#linked-epics" hx-swap="innerHTML">
+        <select name="epic_key" style="flex:1">
+          <option value="">Select an epic to link...</option>
+          {% set linked_epic_keys = project.epics|map(attribute='key')|list %}
+          {% for e in all_epics if e.key not in linked_epic_keys %}
+          <option value="{{ e.key }}">{{ e.key }}: {{ e.title[:50] }}{% if e.title|length > 50 %}...{% endif %}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-primary">Link</button>
+      </form>
+      {% else %}
+      <p class="text-muted text-sm mt-2">No epics synced yet. Sync Jira to import epics.</p>
+      {% endif %}
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Notes ({{ notes|length }})</span>
+        <a href="/notes/new?project_id={{ project.id }}" class="btn btn-primary btn-sm">+ Note</a>
+      </div>
+      {% if notes %}
+      <ul class="item-list">
+        {% for n in notes %}
+        <li>
+          <div style="flex:1">
+            <a href="/notes/{{ n.id }}" style="color:var(--text);text-decoration:none;font-weight:500">{{ n.title }}</a>
+            {% if n.tags %}
+            <div class="mt-2">{% for tag in n.tags.split(',') %}{% if tag.strip() %}<span class="tag">{{ tag.strip() }}</span>{% endif %}{% endfor %}</div>
+            {% endif %}
+          </div>
+          <span class="text-muted text-sm">{{ n.updated_at.strftime('%b %d') }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-muted text-sm">No notes yet.</p>
+      {% endif %}
+    </div>
+
+    <!-- Meetings -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Meeting Notes ({{ meetings|length }})</span>
+        <a href="/meetings/" class="btn btn-ghost btn-sm">Manage</a>
+      </div>
+      {% if meetings %}
+      <ul class="item-list">
+        {% for m in meetings %}
+        <li>
+          <div style="flex:1">
+            <a href="/meetings/{{ m.id }}" style="color:var(--text);text-decoration:none;font-weight:500">{{ m.title }}</a>
+            <div class="text-muted mt-2">{{ m.meeting_date }} - {{ m.action_items|length }} action items</div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-muted text-sm">No meeting notes yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div>
+    <!-- Project Info -->
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:1rem">Project Info</h3>
+      <dl style="margin:0">
+        <dt class="text-muted text-sm">Status</dt>
+        <dd class="mb-3"><span class="badge badge-{{ project.status.value }}">{{ project.status.value }}</span></dd>
+
+        <dt class="text-muted text-sm">Priority</dt>
+        <dd class="mb-3"><span class="badge badge-{{ project.priority.value }}">{{ project.priority.value }}</span></dd>
+
+        <dt class="text-muted text-sm">Created</dt>
+        <dd class="mb-3">{{ project.created_at.strftime('%b %d, %Y') }}</dd>
+
+        <dt class="text-muted text-sm">Updated</dt>
+        <dd>{{ project.updated_at.strftime('%b %d, %Y') }}</dd>
+      </dl>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:1rem">Quick Stats</h3>
+      <div class="grid grid-2" style="gap:12px">
+        <div class="text-center p-2" style="background:var(--surface2);border-radius:6px">
+          <div class="text-lg font-bold">{{ project.goals|length }}</div>
+          <div class="text-muted text-xs">Goals</div>
+        </div>
+        <div class="text-center p-2" style="background:var(--surface2);border-radius:6px">
+          <div class="text-lg font-bold">{{ project.epics|length }}</div>
+          <div class="text-muted text-xs">Epics</div>
+        </div>
+        <div class="text-center p-2" style="background:var(--surface2);border-radius:6px">
+          <div class="text-lg font-bold">{{ project.tasks|length }}</div>
+          <div class="text-muted text-xs">Tasks</div>
+        </div>
+        <div class="text-center p-2" style="background:var(--surface2);border-radius:6px">
+          <div class="text-lg font-bold">{{ notes|length }}</div>
+          <div class="text-muted text-xs">Notes</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reminders -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Reminders</span>
+        <a href="/reminders/" class="btn btn-ghost btn-sm">Manage</a>
+      </div>
+      {% if reminders %}
+      <ul class="item-list">
+        {% for r in reminders[:5] %}
+        <li>
+          <div style="flex:1">
+            <div class="{{ 'done-text' if r.is_done else 'fw-600' }} text-sm">{{ r.title }}</div>
+            <div class="text-muted text-xs">{{ r.due_at.strftime('%b %d, %H:%M') }}</div>
+          </div>
+          <span class="badge badge-sm badge-{{ r.priority.value }}">{{ r.priority.value }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if reminders|length > 5 %}
+      <p class="text-muted text-sm mt-2">+ {{ reminders|length - 5 }} more</p>
+      {% endif %}
+      {% else %}
+      <p class="text-muted text-sm">No reminders.</p>
+      {% endif %}
+    </div>
+
+    <!-- External Links -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Links</span>
+        <a href="/links/new?project_id={{ project.id }}" class="btn btn-primary btn-sm">+</a>
+      </div>
+      {% if links %}
+      <ul class="item-list">
+        {% for lnk in links[:5] %}
+        <li>
+          <span class="link-type-badge link-type-{{ lnk.link_type.value }}" style="font-size:.6rem;min-width:50px;padding:2px 5px">{{ lnk.link_type.value }}</span>
+          <a href="{{ lnk.url }}" target="_blank" rel="noopener noreferrer"
+             style="color:var(--accent-h);font-size:.82rem;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{ lnk.title }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if links|length > 5 %}
+      <p class="text-muted text-sm mt-2">+ {{ links|length - 5 }} more</p>
+      {% endif %}
+      {% else %}
+      <p class="text-muted text-sm">No links yet.</p>
+      {% endif %}
+    </div>
+
+    <!-- Delete -->
+    <div class="card" style="border-color:#3a1a1a">
+      <form method="post" action="/projects/{{ project.id }}/delete"
+            hx-post="/projects/{{ project.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+            onsubmit="return confirm('Delete this project and all its data?')">
+        <button type="submit" class="btn btn-danger btn-sm w-100">Delete Project</button>
+      </form>
+    </div>
+  </div>
+</div>

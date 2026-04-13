@@ -1,0 +1,143 @@
+<div class="grid grid-2">
+
+  <!-- Edit form -->
+  <div class="card" style="grid-column:1/-1">
+    <details {% if not meeting.notes and not meeting.summary %}open{% endif %}>
+      <summary style="cursor:pointer;font-weight:600;color:var(--muted);font-size:.85rem;list-style:none">
+        ▸ Edit meeting details
+      </summary>
+      <form method="post" action="/meetings/{{ meeting.id }}/edit"
+            hx-post="/meetings/{{ meeting.id }}/edit" hx-target="#main-content" hx-swap="innerHTML"
+            style="margin-top:16px">
+        <div class="grid grid-2">
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" name="title" value="{{ meeting.title }}" required />
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" name="meeting_date" value="{{ meeting.meeting_date }}" required />
+          </div>
+          <div class="form-group">
+            <label>Attendees</label>
+            <input type="text" name="attendees" value="{{ meeting.attendees }}" />
+          </div>
+          <div class="form-group">
+            <label>Project</label>
+            <select name="project_id">
+              <option value="">— None —</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}" {{ 'selected' if meeting.project_id == p.id }}>{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Summary</label>
+          <input type="text" name="summary" value="{{ meeting.summary }}" />
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea name="notes" style="min-height:160px">{{ meeting.notes }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Save changes</button>
+      </form>
+    </details>
+  </div>
+
+  <!-- Summary panel -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Summary</span></div>
+    {% if meeting.summary %}<p>{{ meeting.summary }}</p>{% endif %}
+    {% if meeting.attendees %}<p class="text-muted text-sm mt-3">Attendees: {{ meeting.attendees }}</p>{% endif %}
+    {% if meeting.notes %}
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;white-space:pre-wrap;font-size:.88rem;line-height:1.7">{{ meeting.notes }}</div>
+    {% endif %}
+  </div>
+
+  <!-- Action items -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Action Items</span>
+      <span class="text-muted text-sm">
+        {{ meeting.action_items | selectattr('is_done', 'equalto', true) | list | length }}/{{ meeting.action_items|length }} done
+      </span>
+    </div>
+
+    {% if meeting.action_items %}
+    <ul class="item-list" style="margin-bottom:16px">
+      {% for item in meeting.action_items %}
+      <li>
+        <form method="post" action="/meetings/{{ meeting.id }}/action-items/{{ item.id }}/toggle"
+              hx-post="/meetings/{{ meeting.id }}/action-items/{{ item.id }}/toggle"
+              hx-target="#main-content" hx-swap="innerHTML">
+          <button type="submit" class="check-btn {{ 'done' if item.is_done }}"></button>
+        </form>
+        <div style="flex:1">
+          <div class="{{ 'done-text' if item.is_done else 'fw-600' }}">{{ item.description }}</div>
+          <div class="text-muted text-sm mt-2">
+            {% if item.owner %}Owner: {{ item.owner }}{% endif %}
+            {% if item.due_date %} &nbsp;·&nbsp; Due: {{ item.due_date }}{% endif %}
+          </div>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <!-- Add action item -->
+    <form method="post" action="/meetings/{{ meeting.id }}/action-items/new"
+          hx-post="/meetings/{{ meeting.id }}/action-items/new"
+          hx-target="#main-content" hx-swap="innerHTML">
+      <div class="form-group">
+        <label>New action item</label>
+        <input type="text" name="description" required placeholder="e.g. Update ETL pipeline docs" />
+      </div>
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label>Owner</label>
+          <input type="text" name="owner" placeholder="Name" />
+        </div>
+        <div class="form-group">
+          <label>Due date</label>
+          <input type="date" name="due_date" />
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Add</button>
+    </form>
+  </div>
+
+  <!-- External Links -->
+  <div class="card" style="grid-column:1/-1">
+    <div class="card-header">
+      <span class="card-title">External Links ({{ links|length }})</span>
+      <a href="/links/new?meeting_id={{ meeting.id }}" class="btn btn-primary btn-sm">+ Link</a>
+    </div>
+    {% if links %}
+    <ul class="item-list">
+      {% for lnk in links %}
+      <li>
+        <span class="link-type-badge link-type-{{ lnk.link_type.value }}">{{ lnk.link_type.value }}</span>
+        <div style="flex:1;min-width:0">
+          <a href="{{ lnk.url }}" target="_blank" rel="noopener noreferrer"
+             style="color:var(--accent-h);font-weight:500;text-decoration:none;word-break:break-all">
+            {{ lnk.title }}
+          </a>
+          {% if lnk.description %}
+          <div class="text-muted text-sm mt-2">{{ lnk.description }}</div>
+          {% endif %}
+        </div>
+        <form method="post" action="/links/{{ lnk.id }}/delete"
+              hx-post="/links/{{ lnk.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+              style="flex-shrink:0">
+          <button type="submit" class="btn btn-danger btn-sm">✕</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted text-sm">No links yet. Attach GitHub PRs, Jira tickets, or Confluence pages.</p>
+    {% endif %}
+  </div>
+
+</div>

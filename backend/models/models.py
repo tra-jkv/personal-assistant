@@ -260,18 +260,6 @@ class Reminder(Base):
     task = relationship("Task", back_populates="reminders")
 
 
-class StandupLog(Base):
-    __tablename__ = "standup_logs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    log_date = Column(String(10), nullable=False)  # YYYY-MM-DD
-    did = Column(Text, default="")  # what I did
-    doing = Column(Text, default="")  # what I'm doing today
-    blockers = Column(Text, default="")  # blockers
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
-
-
 class MeetingNote(Base):
     __tablename__ = "meeting_notes"
 

@@ -166,7 +166,7 @@ def delete_link(
 
 def _project_detail(request: Request, project_id: int, db: Session) -> HTMLResponse:
     from backend.models import MeetingNote, Note, Reminder
-    from backend.models.models import Priority, ProjectStatus
+    from backend.models.models import Epic, Goal, GoalStatus, Priority, ProjectStatus
 
     project = db.query(Project).filter(Project.id == project_id).first()
     notes = (
@@ -187,15 +187,26 @@ def _project_detail(request: Request, project_id: int, db: Session) -> HTMLRespo
         .order_by(ExternalLink.created_at.desc())
         .all()
     )
+    all_goals = (
+        db.query(Goal)
+        .filter(Goal.status != GoalStatus.cancelled)
+        .order_by(Goal.year.desc(), Goal.title)
+        .all()
+    )
+    all_epics = db.query(Epic).order_by(Epic.key).all()
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "projects/detail_content.html" if is_htmx else "projects/detail.html"
     return templates.TemplateResponse(
         request,
-        "projects/detail.html",
+        template,
         {
             "project": project,
             "notes": notes,
             "reminders": reminders,
             "meetings": meetings,
             "links": links,
+            "all_goals": all_goals,
+            "all_epics": all_epics,
             "statuses": list(ProjectStatus),
             "priorities": list(Priority),
             "link_types": list(LinkType),

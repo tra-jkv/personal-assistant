@@ -14,7 +14,6 @@ from .models import Priority as Priority
 from .models import Project as Project
 from .models import ProjectStatus as ProjectStatus
 from .models import Reminder as Reminder
-from .models import StandupLog as StandupLog
 from .models import SyncState as SyncState
 from .models import Task as Task
 from .models import TaskStatus as TaskStatus

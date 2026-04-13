@@ -325,9 +325,11 @@ def delete_action_item_api(
 def _list(request, db):
     meetings = db.query(MeetingNote).order_by(MeetingNote.meeting_date.desc()).all()
     projects = db.query(Project).order_by(Project.name).all()
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "meetings/list_content.html" if is_htmx else "meetings/list.html"
     return templates.TemplateResponse(
         request,
-        "meetings/list.html",
+        template,
         {
             "meetings": meetings,
             "projects": projects,
@@ -344,9 +346,11 @@ def _detail(request, db, meeting):
         .order_by(ExternalLink.created_at.desc())
         .all()
     )
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "meetings/detail_content.html" if is_htmx else "meetings/detail.html"
     return templates.TemplateResponse(
         request,
-        "meetings/detail.html",
+        template,
         {
             "meeting": meeting,
             "projects": projects,

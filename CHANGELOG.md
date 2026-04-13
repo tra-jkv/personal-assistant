@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-04-13
+
+### Fixed
+- HTMX partial injection bug across Notes, Meetings, Projects, and Standup — POST handlers now detect `HX-Request` and return content-only partials instead of full `base.html` pages, preventing the sidebar from being duplicated inside `#main-content`
+
+### Removed
+- Standup feature fully removed (router, templates, model, DB table) — superseded by Daily Report
+
 ## [0.2.0] - 2026-04-12
 
 ### Added

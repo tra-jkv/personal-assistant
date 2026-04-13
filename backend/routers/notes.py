@@ -242,8 +242,10 @@ def create_note(
     db.refresh(note)
     notes = db.query(Note).order_by(Note.updated_at.desc()).all()
     projects = db.query(Project).order_by(Project.name).all()
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "notes/list_content.html" if is_htmx else "notes/list.html"
     return templates.TemplateResponse(
-        request, "notes/list.html", {"notes": notes, "projects": projects, "q": ""}
+        request, template, {"notes": notes, "projects": projects, "q": ""}
     )
 
 
@@ -297,9 +299,11 @@ def edit_note(
         .order_by(ExternalLink.created_at.desc())
         .all()
     )
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "notes/detail_content.html" if is_htmx else "notes/detail.html"
     return templates.TemplateResponse(
         request,
-        "notes/detail.html",
+        template,
         {
             "note": note,
             "projects": projects,
@@ -317,6 +321,8 @@ def delete_note(note_id: int, request: Request, db: Session = Depends(get_db)):
         db.commit()
     notes = db.query(Note).order_by(Note.updated_at.desc()).all()
     projects = db.query(Project).order_by(Project.name).all()
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "notes/list_content.html" if is_htmx else "notes/list.html"
     return templates.TemplateResponse(
-        request, "notes/list.html", {"notes": notes, "projects": projects, "q": ""}
+        request, template, {"notes": notes, "projects": projects, "q": ""}
     )

@@ -27,7 +27,6 @@ from backend.routers import (  # noqa: E402
     projects,
     reminders,
     reports,
-    standup,
     tasks,
 )
 
@@ -119,7 +118,6 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 app.include_router(projects.router)
 app.include_router(notes.router)
 app.include_router(reminders.router)
-app.include_router(standup.router)
 app.include_router(meetings.router)
 app.include_router(ai.router)
 app.include_router(links.router)

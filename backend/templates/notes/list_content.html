@@ -1,0 +1,45 @@
+<!-- Search -->
+<form method="get" action="/notes/" hx-get="/notes/" hx-target="#main-content" hx-swap="innerHTML" style="margin-bottom:20px">
+  <div class="flex gap-2">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search notes by title, content or tags…" style="max-width:400px" />
+    <button type="submit" class="btn btn-ghost btn-sm">Search</button>
+    {% if q %}<a href="/notes/" class="btn btn-ghost btn-sm">Clear</a>{% endif %}
+  </div>
+</form>
+
+{% if notes %}
+<div class="grid">
+  {% for n in notes %}
+  <div class="card" style="padding:14px 20px">
+    <div class="flex justify-between items-center">
+      <div style="flex:1">
+        <a href="/notes/{{ n.id }}" style="color:var(--text);text-decoration:none;font-size:.95rem;font-weight:600">{{ n.title }}</a>
+        {% if n.project %}
+        <span class="badge badge-active" style="margin-left:8px;font-size:.68rem">{{ n.project.name }}</span>
+        {% endif %}
+        {% if n.content %}
+        <p class="text-muted mt-2" style="font-size:.82rem">{{ n.content[:100] }}{% if n.content|length > 100 %}…{% endif %}</p>
+        {% endif %}
+        {% if n.tags %}
+        <div class="mt-2">{% for tag in n.tags.split(',') %}{% if tag.strip() %}<span class="tag">{{ tag.strip() }}</span>{% endif %}{% endfor %}</div>
+        {% endif %}
+      </div>
+      <div class="flex gap-2" style="flex-shrink:0;margin-left:16px">
+        <span class="text-muted text-sm">{{ n.updated_at.strftime('%b %d') }}</span>
+        <form method="post" action="/notes/{{ n.id }}/delete"
+              hx-post="/notes/{{ n.id }}/delete" hx-target="#main-content" hx-swap="innerHTML"
+              onsubmit="return confirm('Delete this note?')">
+          <button class="btn btn-danger btn-sm">Del</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">📝</div>
+  {% if q %}<p>No notes matching "{{ q }}"</p>{% else %}<p>No notes yet.</p>{% endif %}
+  <a href="/notes/new" class="btn btn-primary mt-3">Create your first note</a>
+</div>
+{% endif %}
