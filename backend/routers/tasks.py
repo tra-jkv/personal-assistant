@@ -863,6 +863,34 @@ async def transition_subtask(
     )
 
 
+@router.post("/{task_id}/sync-subtasks", response_class=JSONResponse)
+def sync_task_subtasks(
+    task_id: int,
+    db: Session = Depends(get_db),
+):
+    """Re-fetch subtasks from Jira for a single story and update the DB."""
+    from backend.services.jira_service import create_jira_service
+
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return JSONResponse({"success": False, "error": "Task not found"}, status_code=404)
+
+    if not task.jira_key:
+        return JSONResponse({"success": False, "error": "Task has no Jira key"}, status_code=400)
+
+    jira = create_jira_service()
+    if not jira:
+        return JSONResponse(
+            {"success": False, "error": "Jira service not configured"}, status_code=500
+        )
+
+    subtasks = jira.get_subtasks_for_story(task.jira_key)
+    task.subtasks_json = json.dumps(subtasks)
+    db.commit()
+
+    return JSONResponse({"success": True, "subtask_count": len(subtasks)})
+
+
 @router.get("/{task_id}/subtask/{subtask_key}/transitions", response_class=JSONResponse)
 def get_subtask_transitions(
     task_id: int,

@@ -448,14 +448,24 @@ class JiraService:
                 start_at = 0
                 max_results = 100
                 while True:
-                    results = self.jira.search_issues(jql, startAt=start_at, maxResults=max_results)
+                    results = self.jira.search_issues(
+                        jql,
+                        startAt=start_at,
+                        maxResults=max_results,
+                        fields="summary,status,assignee,parent,issuetype",
+                    )
 
                     if not results:
                         break
 
                     for issue in results:
                         parent = getattr(issue.fields, "parent", None)
+
+                        # Fall back to using the issue's own key as parent lookup via JQL context.
+                        # For Story-type children (next-gen Jira), parent field should always be
+                        # present when explicitly requested above, but guard defensively.
                         if not parent:
+                            print(f"  Warning: no parent field on {issue.key}, skipping")
                             continue
 
                         parent_key = parent.key
