@@ -361,9 +361,10 @@ async def _handle_ask_mode(
         "You help track goals, projects, Jira epics/stories, notes, reminders, and meetings.\n\n"
         "CRITICAL RULES:\n"
         "1. Stories are the main work items. Subtasks belong INSIDE stories.\n"
-        "2. NEVER list subtasks (DL-3xxx keys with parent story) as separate items.\n"
-        "3. When asked about 'tasks' or 'work', list STORIES only with subtask counts.\n"
-        "4. Format: **DL-xxxx**: Story title - Status (X/Y subtasks remaining)\n\n"
+        "2. By default, list STORIES with subtask counts. If the user asks to dive deeper or "
+        "list subtasks, show them grouped under their parent story.\n"
+        "3. Format for stories: **DL-xxxx**: Story title - Status (X/Y subtasks remaining)\n"
+        "4. Format for subtasks (when requested): indent under parent story with - DL-xxxx: title - status\n\n"
         "Be concise. Use markdown. This is a multi-turn conversation."
     )
 
