@@ -318,6 +318,52 @@ class BackgroundSync:
 
         return result
 
+    def _sync_today_via_events(self, today: date):
+        """
+        Re-sync today's GitHub reviews using the Events API, which is timestamped
+        to when the review was submitted — unlike the Search API which matches by
+        PR updated_at and misses reviews on already-updated PRs.
+
+        Merges with existing today records: deletes only review rows for today,
+        then re-inserts from the Events API so commits/PRs/Jira are untouched.
+        """
+        if not self.github:
+            return
+
+        try:
+            since = datetime.combine(today, datetime.min.time())
+            end = datetime.combine(today + timedelta(days=1), datetime.min.time())
+
+            reviews = self.github.get_reviews_since(since)
+            print(f"  Events API: {len(reviews)} review(s) for {today}")
+
+            # Delete only today's review rows, preserve other activity types
+            self.db.query(DailyActivity).filter(
+                DailyActivity.activity_date >= since,
+                DailyActivity.activity_date < end,
+                DailyActivity.activity_type == "review",
+            ).delete()
+
+            for review in reviews:
+                self.db.add(
+                    DailyActivity(
+                        activity_date=since,
+                        source="github",
+                        activity_type="review",
+                        external_id=str(review.get("pr_number", "")),
+                        title=review.get("pr_title", ""),
+                        url=review.get("url", ""),
+                        repository=review.get("repo", ""),
+                        status=review.get("state", ""),
+                    )
+                )
+
+            self.db.commit()
+            self.set_last_synced_date(today)
+
+        except Exception as e:
+            print(f"  Events API review sync error: {e}")
+
     def run_full_sync(self, start_date: date = None, end_date: date = None):
         """Run a full sync month-by-month to avoid GitHub rate limits.
 
@@ -344,8 +390,9 @@ class BackgroundSync:
                 end_date = date.today()
 
             if start_date > end_date:
-                print("Already up to date!")
-                _sync_status["progress"] = "Up to date"
+                print("Already up to date — refreshing today via Events API...")
+                _sync_status["progress"] = "Refreshing today"
+                self._sync_today_via_events(end_date)
                 return
 
             total_days = (end_date - start_date).days + 1
@@ -397,6 +444,11 @@ class BackgroundSync:
                             f"reviews={result['reviews']}, jira={result['jira_assigned']}"
                         )
                     current += timedelta(days=1)
+
+            # Always refresh today with the Events API — the Search API matches by
+            # PR updated_at which can miss reviews on PRs that were last updated
+            # before today.
+            self._sync_today_via_events(end_date)
 
             _sync_status["progress"] = "Complete"
             print()
