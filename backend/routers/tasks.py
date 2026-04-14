@@ -199,7 +199,7 @@ def list_tasks_api(
         done_statuses = [k for k, v in JIRA_STATUS_MAP.items() if v == "done"]
         query = query.filter(~Task.status.in_(done_statuses))
 
-    tasks = query.order_by(Task.position, Task.created_at.desc()).all()
+    tasks = query.order_by(Task.jira_updated_at.desc().nullslast(), Task.created_at.desc()).all()
 
     return {"tasks": [_task_to_dict(t) for t in tasks]}
 
@@ -408,7 +408,8 @@ def _board_context(db: Session, project_id: Optional[int] = None, epic_key: Opti
     if epic_key:
         query = query.filter(Task.epic_key == epic_key)
 
-    tasks = query.order_by(Task.position, Task.created_at.desc()).all()
+    # Sort by most recently updated in Jira first; fall back to created_at for local tasks
+    tasks = query.order_by(Task.jira_updated_at.desc().nullslast(), Task.created_at.desc()).all()
 
     # Group tasks by normalized status
     columns = {col: [] for col in BOARD_COLUMNS}

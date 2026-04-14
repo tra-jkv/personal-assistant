@@ -69,7 +69,7 @@ class JiraService:
         try:
             # JQL query for assigned issues
             jql = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
-            results = self.jira.search_issues(jql, maxResults=50)
+            results = self.jira.enhanced_search_issues(jql, maxResults=False)
 
             for issue in results:
                 issues.append(
@@ -98,7 +98,7 @@ class JiraService:
             # JQL for issues updated since timestamp by current user
             since_str = since.strftime("%Y-%m-%d %H:%M")
             jql = f'updated >= "{since_str}" AND assignee = currentUser() ORDER BY updated DESC'
-            results = self.jira.search_issues(jql, maxResults=50)
+            results = self.jira.enhanced_search_issues(jql, maxResults=False)
 
             for issue in results:
                 issues.append(
@@ -125,7 +125,7 @@ class JiraService:
             # Search issues with comments since timestamp
             since_str = since.strftime("%Y-%m-%d %H:%M")
             jql = f'commenter = currentUser() AND commented >= "{since_str}" ORDER BY updated DESC'
-            results = self.jira.search_issues(jql, maxResults=20, expand="changelog")
+            results = self.jira.enhanced_search_issues(jql, maxResults=20, expand="changelog")
 
             for issue in results:
                 issue_comments = self.jira.comments(issue)
@@ -157,28 +157,19 @@ class JiraService:
             # JQL for issues where status changed since timestamp
             since_str = since.strftime("%Y-%m-%d %H:%M")
             jql = f'status CHANGED BY currentUser() AFTER "{since_str}" ORDER BY updated DESC'
-            results = self.jira.search_issues(jql, maxResults=50, expand="changelog")
+            results = self.jira.enhanced_search_issues(jql, maxResults=50, expand="changelog")
 
             for issue in results:
-                # Get changelog
-                changelog = issue.changelog
-
-                for history in changelog.histories:
-                    history_datetime = datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
-
-                    if history_datetime.replace(tzinfo=None) >= since:
-                        for item in history.items:
-                            if item.field == "status":
-                                transitions.append(
-                                    {
-                                        "issue_key": issue.key,
-                                        "issue_summary": issue.fields.summary,
-                                        "from_status": item.fromString,
-                                        "to_status": item.toString,
-                                        "timestamp": history.created,
-                                        "url": f"{self.jira.server_url}/browse/{issue.key}",
-                                    }
-                                )
+                issues.append(
+                    {
+                        "key": issue.key,
+                        "summary": issue.fields.summary,
+                        "status": issue.fields.status.name,
+                        "type": issue.fields.issuetype.name,
+                        "url": f"{self.jira.server_url}/browse/{issue.key}",
+                        "updated": issue.fields.updated,
+                    }
+                )
 
         except JIRAError as e:
             print(f"Error fetching transitions: {e}")
@@ -189,13 +180,19 @@ class JiraService:
         """Get the current user's email"""
         return self.current_user
 
-    def get_epics(self, projects: List[str] = None, max_results: int = 100) -> List[Dict]:
+    def get_epics(
+        self,
+        projects: List[str] = None,
+        max_results: int = False,
+        updated_since: Optional[datetime] = None,
+    ) -> List[Dict]:
         """
         Get all epics from specified projects (or all accessible projects)
 
         Args:
             projects: List of project keys to fetch epics from (e.g., ['DL', 'KS'])
             max_results: Maximum number of epics to fetch
+            updated_since: Only return epics updated after this datetime (incremental sync)
 
         Returns:
             List of epic dictionaries
@@ -208,9 +205,12 @@ class JiraService:
             if projects:
                 project_filter = ", ".join(f'"{p}"' for p in projects)
                 jql_parts.append(f"project in ({project_filter})")
+            if updated_since:
+                since_str = updated_since.strftime("%Y-%m-%d %H:%M")
+                jql_parts.append(f'updated >= "{since_str}"')
 
             jql = " AND ".join(jql_parts) + " ORDER BY updated DESC"
-            results = self.jira.search_issues(jql, maxResults=max_results)
+            results = self.jira.enhanced_search_issues(jql, maxResults=max_results)
 
             for issue in results:
                 epics.append(
@@ -229,27 +229,36 @@ class JiraService:
 
         return epics
 
-    def get_my_stories_for_project(self, project_key: str) -> Dict[str, List[Dict]]:
+    def get_my_stories_for_project(
+        self, project_key: str, updated_since: Optional[datetime] = None
+    ) -> Dict[str, List[Dict]]:
         """
         Get all stories and subtasks where user is involved for a project.
         Returns items grouped by epic key.
 
-        This is more efficient than querying per-epic as it uses fewer API calls.
-
         Args:
             project_key: Project key (e.g., 'DL')
+            updated_since: Only return stories updated after this datetime (incremental sync).
+                           Parent stories of recently-updated subtasks are always included.
 
         Returns:
             Dict mapping epic_key -> list of stories/subtasks
         """
         stories_by_epic = {}
         seen_keys = set()
+        since_clause = ""
+        if updated_since:
+            since_str = updated_since.strftime("%Y-%m-%d %H:%M")
+            since_clause = f' AND updated >= "{since_str}"'
 
         try:
-            # Strategy 1: Stories directly assigned to me
+            # Strategy 1: Stories directly assigned to me (optionally filtered by update time)
             print(f"    Fetching stories assigned to me in {project_key}...")
-            jql1 = f"project = {project_key} AND issuetype != Sub-task AND issuetype != Epic AND assignee = currentUser() ORDER BY updated DESC"
-            results1 = self.jira.search_issues(jql1, maxResults=200)
+            jql1 = (
+                f"project = {project_key} AND issuetype != Sub-task AND issuetype != Epic"
+                f" AND assignee = currentUser(){since_clause} ORDER BY updated DESC"
+            )
+            results1 = self.jira.enhanced_search_issues(jql1, maxResults=False)
 
             for issue in results1:
                 if issue.key in seen_keys:
@@ -265,12 +274,14 @@ class JiraService:
 
             print(f"      Found {len(seen_keys)} stories directly assigned")
 
-            # Strategy 2: Get parent stories from my subtasks (stories where I have subtasks assigned)
+            # Strategy 2: Get parent stories from my recently-updated subtasks.
+            # Always use the since_clause here so we only chase parents of changed subtasks.
             print(f"    Fetching my subtasks in {project_key}...")
             jql_subtasks = (
-                f"project = {project_key} AND issuetype = Sub-task AND assignee = currentUser()"
+                f"project = {project_key} AND issuetype = Sub-task"
+                f" AND assignee = currentUser(){since_clause}"
             )
-            subtasks = self.jira.search_issues(jql_subtasks, maxResults=200)
+            subtasks = self.jira.enhanced_search_issues(jql_subtasks, maxResults=False)
 
             # Collect parent keys that we don't have yet
             parent_keys_to_fetch = set()
@@ -289,7 +300,7 @@ class JiraService:
             if parent_keys_to_fetch:
                 parent_keys_str = ", ".join(parent_keys_to_fetch)
                 jql_parents = f"key in ({parent_keys_str})"
-                parent_issues = self.jira.search_issues(jql_parents, maxResults=200)
+                parent_issues = self.jira.enhanced_search_issues(jql_parents, maxResults=False)
 
                 for issue in parent_issues:
                     if issue.key in seen_keys:
@@ -324,7 +335,7 @@ class JiraService:
 
         try:
             jql = f"parent = {story_key} ORDER BY status ASC"
-            results = self.jira.search_issues(jql, maxResults=50)
+            results = self.jira.enhanced_search_issues(jql, maxResults=False)
 
             for issue in results:
                 assignee_name = ""
@@ -444,52 +455,39 @@ class JiraService:
                 keys_str = ", ".join(batch_keys)
                 jql = f"parent in ({keys_str}) ORDER BY parent ASC, status ASC"
 
-                # Paginate through all results
-                start_at = 0
-                max_results = 100
-                while True:
-                    results = self.jira.search_issues(
-                        jql,
-                        startAt=start_at,
-                        maxResults=max_results,
-                        fields="summary,status,assignee,parent,issuetype",
+                # maxResults=False tells the library to fetch ALL results internally
+                results = self.jira.enhanced_search_issues(
+                    jql,
+                    maxResults=False,
+                    fields="summary,status,assignee,parent,issuetype",
+                )
+
+                for issue in results:
+                    parent = getattr(issue.fields, "parent", None)
+
+                    # For Story-type children (next-gen Jira), parent field should always be
+                    # present when explicitly requested above, but guard defensively.
+                    if not parent:
+                        print(f"  Warning: no parent field on {issue.key}, skipping")
+                        continue
+
+                    parent_key = parent.key
+                    if parent_key not in subtasks_by_story:
+                        subtasks_by_story[parent_key] = []
+
+                    assignee_name = ""
+                    if hasattr(issue.fields, "assignee") and issue.fields.assignee:
+                        assignee_name = issue.fields.assignee.displayName
+
+                    subtasks_by_story[parent_key].append(
+                        {
+                            "key": issue.key,
+                            "title": issue.fields.summary,
+                            "status": issue.fields.status.name,
+                            "assignee": assignee_name,
+                            "url": f"{self.jira.server_url}/browse/{issue.key}",
+                        }
                     )
-
-                    if not results:
-                        break
-
-                    for issue in results:
-                        parent = getattr(issue.fields, "parent", None)
-
-                        # Fall back to using the issue's own key as parent lookup via JQL context.
-                        # For Story-type children (next-gen Jira), parent field should always be
-                        # present when explicitly requested above, but guard defensively.
-                        if not parent:
-                            print(f"  Warning: no parent field on {issue.key}, skipping")
-                            continue
-
-                        parent_key = parent.key
-                        if parent_key not in subtasks_by_story:
-                            subtasks_by_story[parent_key] = []
-
-                        assignee_name = ""
-                        if hasattr(issue.fields, "assignee") and issue.fields.assignee:
-                            assignee_name = issue.fields.assignee.displayName
-
-                        subtasks_by_story[parent_key].append(
-                            {
-                                "key": issue.key,
-                                "title": issue.fields.summary,
-                                "status": issue.fields.status.name,
-                                "assignee": assignee_name,
-                                "url": f"{self.jira.server_url}/browse/{issue.key}",
-                            }
-                        )
-
-                    # Check if we got all results
-                    if len(results) < max_results:
-                        break
-                    start_at += max_results
 
             except JIRAError as e:
                 print(f"Error fetching subtasks batch: {e}")
@@ -543,7 +541,7 @@ class JiraService:
                 jql_parts.append("assignee = currentUser()")
 
             jql = " AND ".join(jql_parts) + " ORDER BY status ASC"
-            results = self.jira.search_issues(jql, maxResults=100)
+            results = self.jira.enhanced_search_issues(jql, maxResults=False)
 
             for issue in results:
                 stories.append(self._issue_to_story_dict(issue, epic_key))
@@ -649,15 +647,20 @@ class JiraService:
         return None
 
     def sync_epics_and_stories(
-        self, projects: List[str] = None, stories_assigned_to_me: bool = True
+        self,
+        projects: List[str] = None,
+        stories_assigned_to_me: bool = True,
+        updated_since: Optional[datetime] = None,
     ) -> Dict:
         """
-        Sync all epics and their stories from Jira
+        Sync all epics and their stories from Jira.
 
         Args:
             projects: List of project keys to sync (e.g., ['DL']). Defaults to ['DL'].
             stories_assigned_to_me: If True, only sync stories assigned to current user
-                                   or stories where user has subtasks
+                                   or stories where user has subtasks.
+            updated_since: If set, only fetch epics/stories updated after this datetime
+                           (incremental sync). Pass None for a full sync.
 
         Returns:
             {
@@ -665,42 +668,59 @@ class JiraService:
                 "stories": [...],
                 "epic_count": int,
                 "story_count": int,
-                "sync_timestamp": str
+                "sync_timestamp": str,
+                "incremental": bool,
             }
         """
         sync_time = datetime.utcnow()
+        incremental = updated_since is not None
+
+        if incremental:
+            print(f"  Incremental sync: only items updated since {updated_since}")
 
         # Default to project key from environment
         if projects is None:
             project_key = os.getenv("JIRA_PROJECT_KEY", "")
             projects = [project_key] if project_key else []
 
-        # Fetch all epics from specified projects
+        # Fetch epics — incremental: only recently updated ones.
+        # For incremental we still need ALL epic keys (to validate story→epic links),
+        # so we do a lightweight key-only full fetch plus a detail fetch for changed ones.
         print(f"  Fetching epics from projects: {projects}")
-        epics = self.get_epics(projects=projects)
-        print(f"  Found {len(epics)} epics")
+        epics = self.get_epics(projects=projects, updated_since=updated_since)
+        print(f"  Found {len(epics)} epics {'(changed)' if incremental else ''}")
 
-        # Create a set of epic keys for filtering
-        epic_keys = {e["key"] for e in epics}
+        # For incremental: we need the full set of epic keys to resolve story parents,
+        # even if those epics themselves haven't changed.
+        if incremental:
+            from backend.database import SessionLocal
+            from backend.models import Epic as EpicModel
+
+            _db = SessionLocal()
+            try:
+                existing_epic_keys = {e.key for e in _db.query(EpicModel).all()}
+            finally:
+                _db.close()
+            epic_keys = existing_epic_keys | {e["key"] for e in epics}
+        else:
+            epic_keys = {e["key"] for e in epics}
 
         all_stories = []
 
         if stories_assigned_to_me:
-            # Use efficient bulk fetch per project
             for project_key in projects:
-                stories_by_epic = self.get_my_stories_for_project(project_key)
-
-                # Only include stories from our epics
+                stories_by_epic = self.get_my_stories_for_project(
+                    project_key, updated_since=updated_since
+                )
                 for epic_key, stories in stories_by_epic.items():
                     if epic_key in epic_keys:
                         all_stories.extend(stories)
         else:
-            # Fetch all stories for each epic
             for epic in epics:
                 stories = self.get_stories_for_epic(epic["key"], assigned_to_me=False)
                 all_stories.extend(stories)
 
-        print(f"  Total: {len(all_stories)} stories for sync")
+        print(f"  Total: {len(all_stories)} stories for sync {'(changed)' if incremental else ''}")
 
         return {
             "epics": epics,
@@ -708,6 +728,7 @@ class JiraService:
             "epic_count": len(epics),
             "story_count": len(all_stories),
             "sync_timestamp": sync_time.isoformat(),
+            "incremental": incremental,
         }
 
     def update_issue(

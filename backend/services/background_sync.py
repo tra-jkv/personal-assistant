@@ -412,18 +412,17 @@ class BackgroundSync:
             _sync_lock.release()
 
 
-def sync_jira_epics_and_stories(projects: list = None):
+def sync_jira_epics_and_stories(projects: list = None, full: bool = False):
     """
     Sync Jira epics and their stories/tasks to the database.
 
-    Stories from Jira are stored in the unified Task model with:
-    - is_synced=True
-    - jira_key set to the Jira issue key
-    - jira_status tracking the original Jira status
+    Runs incrementally by default: only fetches items updated since the last
+    successful sync. Pass full=True to force a complete re-sync.
 
     Args:
         projects: List of project keys (e.g., ['DL', 'KS']).
                   If None, defaults to JIRA_PROJECT_KEY from env.
+        full: If True, ignore last sync time and fetch everything.
     """
     # Always default to the configured project key — never sync all projects
     if projects is None:
@@ -442,10 +441,19 @@ def sync_jira_epics_and_stories(projects: list = None):
         return
 
     try:
-        print("Syncing Jira epics and tasks...")
+        # Determine incremental window
+        updated_since = None
+        if not full:
+            state = db.query(SyncState).filter(SyncState.source == "jira_epics").first()
+            if state and state.last_sync_at:
+                # Subtract a small overlap to avoid missing items at boundary
+                updated_since = state.last_sync_at - timedelta(minutes=5)
 
-        # Fetch all epics and stories from Jira
-        result = jira.sync_epics_and_stories(projects=projects)
+        mode = "full" if updated_since is None else f"incremental (since {updated_since})"
+        print(f"Syncing Jira epics and tasks [{mode}]...")
+
+        # Fetch epics and stories from Jira (incremental or full)
+        result = jira.sync_epics_and_stories(projects=projects, updated_since=updated_since)
 
         epics_synced = 0
         tasks_synced = 0
@@ -548,20 +556,27 @@ def sync_jira_epics_and_stories(projects: list = None):
 
         db.commit()
 
-        # Fetch subtasks for all synced stories
-        print("  Fetching subtasks for stories...")
+        # Fetch subtasks for changed stories only (incremental) or all stories (full)
         story_keys = [s["key"] for s in result["stories"]]
-        subtasks_by_story = jira.get_subtasks_for_stories(story_keys)
+        if not story_keys and result.get("incremental"):
+            print("  No changed stories — skipping subtask fetch")
+        else:
+            if result.get("incremental"):
+                print(f"  Fetching subtasks for {len(story_keys)} changed stories...")
+            else:
+                print(f"  Fetching subtasks for all {len(story_keys)} stories...")
 
-        subtasks_updated = 0
-        for story_key, subtasks in subtasks_by_story.items():
-            task = db.query(Task).filter(Task.jira_key == story_key).first()
-            if task:
-                task.subtasks_json = json.dumps(subtasks)
-                subtasks_updated += 1
+            subtasks_by_story = jira.get_subtasks_for_stories(story_keys)
 
-        db.commit()
-        print(f"  Updated subtasks for {subtasks_updated} stories")
+            subtasks_updated = 0
+            for story_key, subtasks in subtasks_by_story.items():
+                task = db.query(Task).filter(Task.jira_key == story_key).first()
+                if task:
+                    task.subtasks_json = json.dumps(subtasks)
+                    subtasks_updated += 1
+
+            db.commit()
+            print(f"  Updated subtasks for {subtasks_updated} stories")
 
         print(
             f"Synced {epics_synced} epics and {tasks_synced} tasks ({tasks_created} new, {tasks_updated} updated)"

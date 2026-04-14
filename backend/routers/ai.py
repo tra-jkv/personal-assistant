@@ -523,9 +523,11 @@ def ai_status_api():
 
 
 def build_context(db: Session) -> str:
+    import re
+
     lines = []
 
-    # Goals
+    # ── Goals ────────────────────────────────────────────────────────────────
     goals = db.query(Goal).all()
     lines.append("=== GOALS ===")
     for g in goals:
@@ -535,120 +537,143 @@ def build_context(db: Session) -> str:
             f"\n  Linked projects: {projects_list}"
         )
 
-    # Projects
-    projects = db.query(Project).all()
-    lines.append("\n=== PROJECTS ===")
+    # ── Projects → Epics → Stories → Subtasks (full hierarchy) ──────────────
+    projects = db.query(Project).options(joinedload(Project.epics).joinedload(Epic.tasks)).all()
+
+    lines.append("\n=== PROJECTS, EPICS, STORIES & SUBTASKS ===")
+    lines.append("(Full hierarchy: Project > Epic > Story > Subtask)")
+
+    # Collect all task epic_keys that are covered by the project hierarchy
+    covered_epic_keys = set()
+
     for p in projects:
         lines.append(
-            f"- [{p.status.value}] {p.name} (priority: {p.priority.value}): {p.description}"
+            f"\nPROJECT [{p.status.value}] {p.name} (priority: {p.priority.value})"
+            + (f": {p.description}" if p.description else "")
         )
 
-    # Epics
-    epics = db.query(Epic).limit(20).all()
-    lines.append("\n=== JIRA EPICS ===")
-    for e in epics:
-        lines.append(f"- [{e.status}] {e.key}: {e.title}")
+        for e in p.epics:
+            covered_epic_keys.add(e.key)
+            lines.append(f"  EPIC [{e.status}] {e.key}: {e.title}")
 
-    # Tasks - first identify current sprint
-    all_tasks = (
+            for t in e.tasks:
+                jira = f"[{t.jira_key}]" if t.jira_key else f"[local-{t.id}]"
+                assignee = f"@{t.assignee}" if t.assignee else ""
+                sprint = f"sprint:{t.sprint_name}" if t.sprint_name else "backlog"
+                status_str = t.status
+
+                subtasks = []
+                subtask_info = ""
+                if t.subtasks_json:
+                    try:
+                        subtasks = json.loads(t.subtasks_json)
+                        if subtasks:
+                            done_count = sum(
+                                1 for st in subtasks if st.get("status", "").lower() == "done"
+                            )
+                            remaining = len(subtasks) - done_count
+                            subtask_info = f" ({done_count}/{len(subtasks)} subtasks done)"
+                    except Exception:
+                        pass
+
+                lines.append(
+                    f"    STORY {jira} {t.title} - {status_str} {assignee} {sprint}{subtask_info}"
+                )
+
+                # All subtasks (done and not done)
+                for st in subtasks:
+                    st_assignee = f"@{st['assignee']}" if st.get("assignee") else ""
+                    st_status = st.get("status", "")
+                    done_marker = " ✓" if st_status.lower() == "done" else ""
+                    lines.append(
+                        f"      └─ [{st['key']}] {st['title']} - {st_status}{done_marker} {st_assignee}"
+                    )
+
+        if not p.epics:
+            lines.append("  (no epics linked)")
+
+    # ── Epics not linked to any project ─────────────────────────────────────
+    all_epics = db.query(Epic).options(joinedload(Epic.tasks)).all()
+    unlinked_epics = [e for e in all_epics if e.key not in covered_epic_keys]
+    if unlinked_epics:
+        lines.append("\n=== EPICS NOT LINKED TO A PROJECT ===")
+        for e in unlinked_epics:
+            lines.append(f"  EPIC [{e.status}] {e.key}: {e.title}")
+            for t in e.tasks:
+                jira = f"[{t.jira_key}]" if t.jira_key else f"[local-{t.id}]"
+                assignee = f"@{t.assignee}" if t.assignee else ""
+                sprint = f"sprint:{t.sprint_name}" if t.sprint_name else "backlog"
+                subtasks = []
+                subtask_info = ""
+                if t.subtasks_json:
+                    try:
+                        subtasks = json.loads(t.subtasks_json)
+                        if subtasks:
+                            done_count = sum(
+                                1 for st in subtasks if st.get("status", "").lower() == "done"
+                            )
+                            subtask_info = f" ({done_count}/{len(subtasks)} subtasks done)"
+                    except Exception:
+                        pass
+                lines.append(
+                    f"    STORY {jira} {t.title} - {t.status} {assignee} {sprint}{subtask_info}"
+                )
+                for st in subtasks:
+                    st_assignee = f"@{st['assignee']}" if st.get("assignee") else ""
+                    st_status = st.get("status", "")
+                    done_marker = " ✓" if st_status.lower() == "done" else ""
+                    lines.append(
+                        f"      └─ [{st['key']}] {st['title']} - {st_status}{done_marker} {st_assignee}"
+                    )
+
+    # ── Stories not linked to any epic (local tasks / orphans) ───────────────
+    all_epic_keys = {e.key for e in all_epics}
+    orphan_tasks = (
         db.query(Task)
+        .filter((Task.epic_key == None) | (~Task.epic_key.in_(all_epic_keys)))
         .filter(Task.status.notin_(["Done", "done", "Cancelled", "cancelled"]))
-        .order_by(Task.epic_key, Task.position)
-        .limit(100)
         .all()
     )
+    if orphan_tasks:
+        lines.append("\n=== LOCAL / UNLINKED STORIES ===")
+        for t in orphan_tasks:
+            jira = f"[{t.jira_key}]" if t.jira_key else f"[local-{t.id}]"
+            assignee = f"@{t.assignee}" if t.assignee else ""
+            lines.append(f"  STORY {jira} {t.title} - {t.status} {assignee}")
 
-    # Find current/active sprint by looking for sprints containing "active" indicators
-    # or the most recent sprint pattern (highest number in sprint name)
-    sprint_counts = {}
-    for t in all_tasks:
+    # ── Current sprint highlight ─────────────────────────────────────────────
+    # Determine current sprint for quick reference
+    all_open_tasks = db.query(Task).filter(Task.sprint_name != None).all()
+    sprint_counts: dict = {}
+    for t in all_open_tasks:
         if t.sprint_name:
             sprint_counts[t.sprint_name] = sprint_counts.get(t.sprint_name, 0) + 1
 
-    # Determine current sprint - look for highest DF number or most common active sprint
     current_sprint = None
     if sprint_counts:
-        # Sort sprints and pick the most recent one (highest DF number)
-        import re
 
         def sprint_sort_key(name):
-            # Extract number from sprint name like "PI#1 -> DF 6"
             match = re.search(r"DF\s*(\d+)", name)
             return int(match.group(1)) if match else 0
 
         sorted_sprints = sorted(sprint_counts.keys(), key=sprint_sort_key, reverse=True)
-        if sorted_sprints:
-            current_sprint = sorted_sprints[0]
+        current_sprint = sorted_sprints[0]
 
-    # Current sprint section
     if current_sprint:
         lines.append(f"\n=== CURRENT SPRINT: {current_sprint} ===")
-        current_sprint_tasks = [t for t in all_tasks if t.sprint_name == current_sprint]
-        for t in current_sprint_tasks:
-            jira = f"[{t.jira_key}]" if t.jira_key else ""
-            assignee = f"@{t.assignee}" if t.assignee else ""
-            epic = f"(epic: {t.epic_key})" if t.epic_key else ""
+        lines.append("(See full story/subtask details above under Projects/Epics)")
 
-            # Calculate subtask progress inline
-            subtask_info = ""
-            subtasks = []
-            if t.subtasks_json:
-                try:
-                    subtasks = json.loads(t.subtasks_json)
-                    if subtasks:
-                        done_count = sum(1 for st in subtasks if st.get("status") == "Done")
-                        remaining = len(subtasks) - done_count
-                        subtask_info = f" ({remaining}/{len(subtasks)} subtasks remaining)"
-                except Exception:
-                    pass
-
-            lines.append(f"STORY {jira} {t.title} - {t.status}{subtask_info} {assignee} {epic}")
-
-            # Show subtasks nested under story (only non-done ones for brevity)
-            for st in subtasks:
-                if st.get("status") != "Done":
-                    st_assignee = f"@{st['assignee']}" if st.get("assignee") else ""
-                    lines.append(f"  └─ [{st['key']}] {st['title']} - {st['status']} {st_assignee}")
-
-        if not current_sprint_tasks:
-            lines.append("- No tasks in current sprint")
-
-    # All open stories (excluding current sprint to avoid duplication)
-    other_stories = [t for t in all_tasks if t.sprint_name != current_sprint]
-    if other_stories:
-        lines.append("\n=== OTHER OPEN STORIES (not in current sprint) ===")
-        for t in other_stories[:30]:
-            jira = f"[{t.jira_key}]" if t.jira_key else ""
-            assignee = f"@{t.assignee}" if t.assignee else ""
-            epic = f"epic:{t.epic_key}" if t.epic_key else ""
-            sprint = f"sprint:{t.sprint_name}" if t.sprint_name else "backlog"
-
-            # Count subtasks
-            subtask_info = ""
-            if t.subtasks_json:
-                try:
-                    subtasks = json.loads(t.subtasks_json)
-                    if subtasks:
-                        done_count = sum(1 for st in subtasks if st.get("status") == "Done")
-                        remaining = len(subtasks) - done_count
-                        subtask_info = f" ({remaining}/{len(subtasks)} subtasks remaining)"
-                except Exception:
-                    pass
-
-            lines.append(
-                f"STORY {jira} {t.title} - {t.status} {assignee} {epic} {sprint}{subtask_info}"
-            )
-
-    # Notes
-    notes = db.query(Note).order_by(Note.updated_at.desc()).limit(20).all()
-    lines.append("\n=== RECENT NOTES ===")
+    # ── Notes (full content, all notes) ─────────────────────────────────────
+    notes = db.query(Note).order_by(Note.updated_at.desc()).all()
+    lines.append("\n=== NOTES ===")
     for n in notes:
         proj = f" [project: {n.project.name}]" if n.project else ""
-        lines.append(f"### {n.title}{proj}\n{n.content[:500]}\ntags: {n.tags}")
+        tags = f"\n  tags: {n.tags}" if n.tags else ""
+        lines.append(f"### {n.title}{proj}\n{n.content}{tags}")
 
-    # Meetings
-    meetings = db.query(MeetingNote).order_by(MeetingNote.meeting_date.desc()).limit(10).all()
-    lines.append("\n=== RECENT MEETINGS ===")
+    # ── Meetings (all, full content) ─────────────────────────────────────────
+    meetings = db.query(MeetingNote).order_by(MeetingNote.meeting_date.desc()).all()
+    lines.append("\n=== MEETINGS ===")
     for m in meetings:
         items = "\n".join(
             f"  - [{'x' if i.is_done else ' '}] {i.description} (owner: {i.owner}, due: {i.due_date})"
@@ -658,58 +683,18 @@ def build_context(db: Session) -> str:
             f"Meeting: {m.title} ({m.meeting_date})\nSummary: {m.summary}\nAction items:\n{items}"
         )
 
-    # Daily Activities (last 14 days)
-    two_weeks_ago = datetime.utcnow() - timedelta(days=14)
-    activities = (
-        db.query(DailyActivity)
-        .filter(DailyActivity.activity_date >= two_weeks_ago)
-        .order_by(DailyActivity.activity_date.desc())
-        .limit(100)
-        .all()
-    )
-    lines.append("\n=== RECENT WORK ACTIVITY (Last 14 days) ===")
-
-    # Group by date
-    activities_by_date = {}
-    for a in activities:
-        date_str = a.activity_date.strftime("%Y-%m-%d")
-        if date_str not in activities_by_date:
-            activities_by_date[date_str] = []
-        activities_by_date[date_str].append(a)
-
-    for date_str in sorted(activities_by_date.keys(), reverse=True):
-        day_activities = activities_by_date[date_str]
-        lines.append(f"\n{date_str}:")
-        for a in day_activities:
-            repo = f" ({a.repository})" if a.repository else ""
-            lines.append(f"  - [{a.source}/{a.activity_type}]{repo} {a.title[:100]}")
-
-    # Daily Summaries (last 14 days)
-    summaries = (
-        db.query(DailySummary)
-        .filter(DailySummary.summary_date >= two_weeks_ago)
-        .order_by(DailySummary.summary_date.desc())
-        .all()
-    )
-    if summaries:
-        lines.append("\n=== DAILY SUMMARY STATS (Last 14 days) ===")
-        for s in summaries:
-            date_str = s.summary_date.strftime("%Y-%m-%d")
-            lines.append(
-                f"{date_str}: {s.github_commits} commits, {s.github_prs} PRs, "
-                f"{s.github_reviews} reviews, {s.jira_assigned} Jira issues"
-            )
-
-    # Reminders
-    reminders = db.query(Reminder).filter(not Reminder.is_done).order_by(Reminder.due_at).all()
+    # ── Reminders (all open) ─────────────────────────────────────────────────
+    reminders = db.query(Reminder).filter(Reminder.is_done == False).order_by(Reminder.due_at).all()
     lines.append("\n=== OPEN REMINDERS ===")
     for r in reminders:
         lines.append(
             f"- [{r.priority.value}] {r.title} due {r.due_at.strftime('%Y-%m-%d %H:%M')}: {r.description}"
         )
+    if not reminders:
+        lines.append("- No open reminders")
 
-    # External Links
-    ext_links = db.query(ExternalLink).order_by(ExternalLink.created_at.desc()).limit(30).all()
+    # ── External Links (all) ─────────────────────────────────────────────────
+    ext_links = db.query(ExternalLink).order_by(ExternalLink.created_at.desc()).all()
     lines.append("\n=== EXTERNAL LINKS ===")
     for lnk in ext_links:
         context_parts = []
@@ -724,6 +709,47 @@ def build_context(db: Session) -> str:
             f"- [{lnk.link_type.value}] {lnk.title}{ctx}: {lnk.url}"
             + (f" — {lnk.description}" if lnk.description else "")
         )
+    if not ext_links:
+        lines.append("- No links saved")
+
+    # ── Daily Activities (last 14 days) ──────────────────────────────────────
+    two_weeks_ago = datetime.utcnow() - timedelta(days=14)
+    activities = (
+        db.query(DailyActivity)
+        .filter(DailyActivity.activity_date >= two_weeks_ago)
+        .order_by(DailyActivity.activity_date.desc())
+        .limit(200)
+        .all()
+    )
+    lines.append("\n=== RECENT WORK ACTIVITY (Last 14 days) ===")
+    activities_by_date: dict = {}
+    for a in activities:
+        date_str = a.activity_date.strftime("%Y-%m-%d")
+        if date_str not in activities_by_date:
+            activities_by_date[date_str] = []
+        activities_by_date[date_str].append(a)
+
+    for date_str in sorted(activities_by_date.keys(), reverse=True):
+        lines.append(f"\n{date_str}:")
+        for a in activities_by_date[date_str]:
+            repo = f" ({a.repository})" if a.repository else ""
+            lines.append(f"  - [{a.source}/{a.activity_type}]{repo} {a.title[:150]}")
+
+    # ── Daily Summaries (last 14 days) ───────────────────────────────────────
+    summaries = (
+        db.query(DailySummary)
+        .filter(DailySummary.summary_date >= two_weeks_ago)
+        .order_by(DailySummary.summary_date.desc())
+        .all()
+    )
+    if summaries:
+        lines.append("\n=== DAILY SUMMARY STATS (Last 14 days) ===")
+        for s in summaries:
+            date_str = s.summary_date.strftime("%Y-%m-%d")
+            lines.append(
+                f"{date_str}: {s.github_commits} commits, {s.github_prs} PRs, "
+                f"{s.github_reviews} reviews, {s.jira_assigned} Jira issues"
+            )
 
     return "\n".join(lines)
 
