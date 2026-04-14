@@ -1,7 +1,11 @@
 <div id="epic-{{ epic.key }}" class="epic-card {% if epic.project %}assigned{% endif %}"
+     data-epic-key="{{ epic.key }}"
+     data-status="{{ epic.status }}"
      data-has-stories="{{ 'true' if epic.tasks|length > 0 else 'false' }}"
      data-has-goal="{{ 'true' if epic.project and epic.project.goals else 'false' }}"
      onclick="window.location.href='/epics/{{ epic.key }}'" style="cursor:pointer">
+  <!-- Drag handle -->
+  <div class="drag-handle" onclick="event.stopPropagation()" title="Drag to move">⠿</div>
   <div class="epic-header" onclick="event.stopPropagation()">
     <a href="{{ epic.jira_url }}" target="_blank" class="epic-key">{{ epic.key }}</a>
   </div>

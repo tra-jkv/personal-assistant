@@ -2,7 +2,7 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 
@@ -38,72 +38,10 @@ def list_epics(
     db: Session = Depends(get_db),
 ):
     """Epics Kanban board - organized by status"""
-
-    # Get all epics with their tasks and project (one-to-many), including project's goals
-    query = db.query(Epic).options(
-        joinedload(Epic.tasks),
-        joinedload(Epic.project).joinedload(Project.goals),
-    )
-
-    # Filter by project if provided
-    if project_id is not None:
-        query = query.filter(Epic.project_id == project_id)
-
-    epics_list = query.order_by(Epic.key.desc()).all()
-
-    # Filter if requested
-    if filter == "unassigned":
-        epics_list = [e for e in epics_list if e.project is None]
-    elif filter == "assigned":
-        epics_list = [e for e in epics_list if e.project is not None]
-
-    # Group epics by status
-    epics_by_status = {}
-    for col in EPIC_STATUS_COLUMNS:
-        epics_by_status[col["key"]] = [e for e in epics_list if e.status in col["statuses"]]
-
-    # Get all active projects for the dropdown
-    projects = (
-        db.query(Project)
-        .filter(Project.status != ProjectStatus.archived)
-        .order_by(Project.name)
-        .all()
-    )
-
-    # Get current project if filtering by project_id
-    current_project = None
-    if project_id is not None:
-        current_project = db.query(Project).filter(Project.id == project_id).first()
-
-    # Count stats
-    total_epics = len(epics_list)
-    assigned_epics = sum(1 for e in epics_list if e.project is not None)
-    unassigned_epics = total_epics - assigned_epics
-    in_progress_epics = len(epics_by_status.get("in_development", []))
-    done_epics = len(epics_by_status.get("done", []))
-
+    ctx = _epics_board_context(db, project_id=project_id, filter=filter)
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "epics/list_content.html" if is_htmx else "epics/list.html"
-
-    return templates.TemplateResponse(
-        request,
-        template,
-        {
-            "epics": epics_list,
-            "epics_by_status": epics_by_status,
-            "columns": EPIC_STATUS_COLUMNS,
-            "projects": projects,
-            "current_project": current_project,
-            "project_id": project_id,
-            "filter": filter,
-            "total_epics": total_epics,
-            "assigned_epics": assigned_epics,
-            "unassigned_epics": unassigned_epics,
-            "in_progress_epics": in_progress_epics,
-            "done_epics": done_epics,
-            "current_user": CURRENT_USER_DISPLAY_NAME,
-        },
-    )
+    return templates.TemplateResponse(request, template, ctx)
 
 
 @router.get("/{epic_key}", response_class=HTMLResponse)
@@ -197,6 +135,133 @@ def assign_epic_to_project(
         "epics/epic_card.html",
         {"epic": epic, "projects": projects, "current_user": CURRENT_USER_DISPLAY_NAME},
     )
+
+
+def _epics_board_context(
+    db: Session, project_id: Optional[int] = None, filter: Optional[str] = None
+):
+    """Build grouped epic data for kanban rendering (shared by list and move endpoints)."""
+    query = db.query(Epic).options(
+        joinedload(Epic.tasks),
+        joinedload(Epic.project).joinedload(Project.goals),
+    )
+    if project_id is not None:
+        query = query.filter(Epic.project_id == project_id)
+
+    epics_list = query.order_by(Epic.position.asc().nullslast(), Epic.key.desc()).all()
+
+    if filter == "unassigned":
+        epics_list = [e for e in epics_list if e.project is None]
+    elif filter == "assigned":
+        epics_list = [e for e in epics_list if e.project is not None]
+
+    epics_by_status = {}
+    for col in EPIC_STATUS_COLUMNS:
+        epics_by_status[col["key"]] = [e for e in epics_list if e.status in col["statuses"]]
+
+    projects = (
+        db.query(Project)
+        .filter(Project.status != ProjectStatus.archived)
+        .order_by(Project.name)
+        .all()
+    )
+
+    current_project = None
+    if project_id is not None:
+        current_project = db.query(Project).filter(Project.id == project_id).first()
+
+    return {
+        "epics": epics_list,
+        "epics_by_status": epics_by_status,
+        "columns": EPIC_STATUS_COLUMNS,
+        "projects": projects,
+        "current_project": current_project,
+        "project_id": project_id,
+        "filter": filter,
+        "total_epics": len(epics_list),
+        "assigned_epics": sum(1 for e in epics_list if e.project is not None),
+        "unassigned_epics": sum(1 for e in epics_list if e.project is None),
+        "in_progress_epics": len(epics_by_status.get("in_development", [])),
+        "done_epics": len(epics_by_status.get("done", [])),
+        "current_user": CURRENT_USER_DISPLAY_NAME,
+    }
+
+
+@router.post("/{epic_key}/move", response_class=HTMLResponse)
+def move_epic(
+    epic_key: str,
+    request: Request,
+    status: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Move an epic to a different status column (local-only; does not push to Jira)."""
+    epic = db.query(Epic).filter(Epic.key == epic_key).first()
+    if not epic:
+        raise HTTPException(status_code=404, detail="Epic not found")
+
+    epic.status = status
+    db.commit()
+
+    ctx = _epics_board_context(db)
+    template = (
+        "epics/list_content.html"
+        if request.headers.get("HX-Request") == "true"
+        else "epics/list.html"
+    )
+    return templates.TemplateResponse(request, template, ctx)
+
+
+@router.post("/{epic_key}/reorder", response_class=JSONResponse)
+async def reorder_epic(
+    epic_key: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Persist within-column DnD reorder for epics.
+
+    Body: { "position": <int>, "status": "<status_string>" }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    new_position = body.get("position")
+    status_hint = body.get("status")
+
+    epic = db.query(Epic).filter(Epic.key == epic_key).first()
+    if not epic:
+        return JSONResponse({"success": False, "error": "Epic not found"}, status_code=404)
+
+    # Find which column this epic belongs to
+    col_statuses: list[str] = []
+    for col in EPIC_STATUS_COLUMNS:
+        check_status = status_hint or epic.status
+        if check_status in col["statuses"]:
+            col_statuses = col["statuses"]
+            break
+    if not col_statuses:
+        col_statuses = [status_hint or epic.status]
+
+    col_epics = (
+        db.query(Epic)
+        .filter(Epic.status.in_(col_statuses))
+        .order_by(Epic.position.asc().nullslast(), Epic.key.desc())
+        .all()
+    )
+
+    col_epics = [e for e in col_epics if e.key != epic_key]
+    if new_position is None:
+        new_position = len(col_epics)
+    new_position = max(0, min(new_position, len(col_epics)))
+    col_epics.insert(new_position, epic)
+
+    for idx, e in enumerate(col_epics):
+        e.position = idx
+
+    db.commit()
+    return JSONResponse({"success": True, "epic_key": epic_key, "position": new_position})
 
 
 @router.post("/{epic_key}/unassign/{project_id}", response_class=HTMLResponse)

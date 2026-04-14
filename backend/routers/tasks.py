@@ -408,8 +408,12 @@ def _board_context(db: Session, project_id: Optional[int] = None, epic_key: Opti
     if epic_key:
         query = query.filter(Task.epic_key == epic_key)
 
-    # Sort by most recently updated in Jira first; fall back to created_at for local tasks
-    tasks = query.order_by(Task.jira_updated_at.desc().nullslast(), Task.created_at.desc()).all()
+    # Sort by explicit position first (set by DnD reorder), then by jira_updated_at for new items
+    tasks = query.order_by(
+        Task.position.asc().nullslast(),
+        Task.jira_updated_at.desc().nullslast(),
+        Task.created_at.desc(),
+    ).all()
 
     # Group tasks by normalized status
     columns = {col: [] for col in BOARD_COLUMNS}
@@ -890,6 +894,59 @@ def sync_task_subtasks(
     db.commit()
 
     return JSONResponse({"success": True, "subtask_count": len(subtasks)})
+
+
+@router.post("/{task_id}/reorder", response_class=JSONResponse)
+async def reorder_task(
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Persist a within-column drag-and-drop reorder.
+
+    Expects JSON body: { "position": <int>, "status": "<jira_status_string>" }
+
+    Reassigns `position` values for all tasks in the same column so that the
+    moved task ends up at the requested index.  Returns { "success": true }.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    new_position = body.get("position")
+    status_hint = body.get("status")  # Jira status string for the column
+
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return JSONResponse({"success": False, "error": "Task not found"}, status_code=404)
+
+    # Determine the canonical Jira statuses that map to this column
+    col_key = normalize_status(status_hint or task.status)
+    col_statuses = [k for k, v in JIRA_STATUS_MAP.items() if v == col_key]
+
+    # Fetch all tasks in the same column ordered by current position, then created_at
+    col_tasks = (
+        db.query(Task)
+        .filter(Task.status.in_(col_statuses))
+        .order_by(Task.position.asc().nullslast(), Task.created_at.asc())
+        .all()
+    )
+
+    # Remove the moved task from the list, then re-insert at the new position
+    col_tasks = [t for t in col_tasks if t.id != task_id]
+    if new_position is None:
+        new_position = len(col_tasks)
+    new_position = max(0, min(new_position, len(col_tasks)))
+    col_tasks.insert(new_position, task)
+
+    # Write sequential positions
+    for idx, t in enumerate(col_tasks):
+        t.position = idx
+
+    db.commit()
+    return JSONResponse({"success": True, "task_id": task_id, "position": new_position})
 
 
 @router.get("/{task_id}/subtask/{subtask_key}/transitions", response_class=JSONResponse)

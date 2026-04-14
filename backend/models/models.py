@@ -140,6 +140,7 @@ class Epic(Base):
     last_synced = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    position = Column(Integer, default=0, nullable=True)  # within-column DnD order
 
     # Foreign key to Project (one-to-many: Project has many Epics)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)

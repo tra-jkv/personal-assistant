@@ -26,12 +26,12 @@
 <!-- Normal kanban view -->
 <div class="kanban-board kanban-5-col" id="epics-kanban">
   {% for col in columns %}
-  <div class="kanban-column" data-status="{{ col.key }}">
+  <div class="kanban-column" data-col="{{ col.key }}">
     <div class="kanban-column-header {% if col.key == 'done' %}done{% elif col.key == 'in_development' %}in-progress{% endif %}">
       <h3>{{ col.label }}</h3>
       <span class="badge badge-sm">{{ epics_by_status[col.key]|length }}</span>
     </div>
-    <div class="kanban-cards">
+    <div class="kanban-cards" data-col="{{ col.key }}" data-status="{{ col.statuses[0] }}">
       {% for epic in epics_by_status[col.key] %}
       {% include "epics/epic_card.html" %}
       {% endfor %}
@@ -138,5 +138,80 @@ function applyEpicFilters() {
   if (cbEmpty) cbEmpty.checked = hideEmpty;
   if (cbGoal) cbGoal.checked = goalView;
   if (hideEmpty || goalView) applyEpicFilters();
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+(function initEpicKanbanDnd() {
+  document.querySelectorAll('#epics-kanban .kanban-cards').forEach(function(colEl) {
+    Sortable.create(colEl, {
+      group: 'epics-kanban',
+      animation: 150,
+      handle: '.drag-handle',
+      ghostClass: 'epic-card-ghost',
+      dragClass: 'epic-card-dragging',
+      filter: '.empty-state',
+
+      onEnd: function(evt) {
+        const card = evt.item;
+        const epicKey = card.dataset.epicKey;
+        if (!epicKey) return;
+
+        const fromCol = evt.from.dataset.col;
+        const toCol = evt.to.dataset.col;
+        const toStatus = evt.to.dataset.status;
+        const newIndex = evt.newIndex;
+
+        card.classList.add('epic-card-updating');
+
+        if (fromCol !== toCol) {
+          // Cross-column: change status then re-render board
+          const formData = new FormData();
+          formData.append('status', toStatus);
+
+          fetch('/epics/' + epicKey + '/move', {
+            method: 'POST',
+            body: formData,
+            headers: { 'HX-Request': 'true' }
+          })
+          .then(function(res) {
+            if (!res.ok) throw new Error('Move failed: ' + res.status);
+            return res.text();
+          })
+          .then(function(html) {
+            document.getElementById('main-content').innerHTML = html;
+            htmx.process(document.getElementById('main-content'));
+          })
+          .catch(function(err) {
+            console.error(err);
+            evt.from.insertBefore(card, evt.from.children[evt.oldIndex] || null);
+            card.classList.remove('epic-card-updating');
+            alert('Failed to move epic. Please try again.');
+          });
+
+        } else {
+          // Same-column reorder: persist position only
+          const cards = Array.from(evt.to.querySelectorAll('.epic-card'));
+          const position = cards.indexOf(card);
+
+          fetch('/epics/' + epicKey + '/reorder', {
+            method: 'POST',
+            body: JSON.stringify({ position: position, status: toStatus }),
+            headers: { 'Content-Type': 'application/json' }
+          })
+          .then(function(res) {
+            if (!res.ok) throw new Error('Reorder failed: ' + res.status);
+            card.classList.remove('epic-card-updating');
+          })
+          .catch(function(err) {
+            console.error(err);
+            evt.from.insertBefore(card, evt.from.children[evt.oldIndex] || null);
+            card.classList.remove('epic-card-updating');
+          });
+        }
+      }
+    });
+  });
 })();
 </script>

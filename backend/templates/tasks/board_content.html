@@ -8,11 +8,16 @@
       <span class="kanban-col-count">{{ col_tasks|length }}</span>
     </div>
 
-    <div class="kanban-cards">
+    <div class="kanban-cards" data-col="{{ col }}">
       {% for task in col_tasks %}
       {% set subtasks = task.subtasks_json | default('[]') | tojson | safe %}
       <div class="kanban-card {% if task.jira_key %}jira-synced{% endif %} {% if task.needs_sync_back %}needs-sync{% endif %}"
+           data-task-id="{{ task.id }}"
+           data-col="{{ col }}"
            onclick="window.location.href='/tasks/{{ task.id }}'" style="cursor:pointer">
+
+        <!-- Drag handle -->
+        <div class="drag-handle" onclick="event.stopPropagation()" title="Drag to move">⠿</div>
 
         <!-- Jira key pill -->
         {% if task.jira_key %}
@@ -115,5 +120,88 @@
   </div>
   {% endfor %}
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+(function initKanbanDnd() {
+  // Map column key -> Jira status value (mirrors kanban_to_jira in Python)
+  const kanbanToJira = {{ kanban_to_jira | tojson }};
+
+  document.querySelectorAll('.kanban-cards').forEach(function(col) {
+    Sortable.create(col, {
+      group: 'kanban',          // shared group = cards can move between columns
+      animation: 150,
+      handle: '.drag-handle',
+      ghostClass: 'kanban-card-ghost',
+      dragClass: 'kanban-card-dragging',
+      // Exclude the quick-add placeholder from being draggable targets
+      filter: '.kanban-add-placeholder',
+
+      onEnd: function(evt) {
+        const card = evt.item;
+        const taskId = card.dataset.taskId;
+        const fromCol = evt.from.dataset.col;
+        const toCol = evt.to.dataset.col;
+        const newIndex = evt.newIndex;
+
+        card.classList.add('kanban-card-updating');
+
+        if (fromCol !== toCol) {
+          // ── Cross-column move: change status then re-render board ──
+          const newStatus = kanbanToJira[toCol];
+          if (!newStatus) { card.classList.remove('kanban-card-updating'); return; }
+
+          const formData = new FormData();
+          formData.append('status', newStatus);
+
+          fetch('/tasks/' + taskId + '/move', {
+            method: 'POST',
+            body: formData,
+            headers: { 'HX-Request': 'true' }
+          })
+          .then(function(res) {
+            if (!res.ok) throw new Error('Move failed: ' + res.status);
+            return res.text();
+          })
+          .then(function(html) {
+            document.getElementById('main-content').innerHTML = html;
+            htmx.process(document.getElementById('main-content'));
+          })
+          .catch(function(err) {
+            console.error(err);
+            evt.from.insertBefore(card, evt.from.children[evt.oldIndex] || null);
+            card.classList.remove('kanban-card-updating');
+            alert('Failed to move task. Please try again.');
+          });
+
+        } else {
+          // ── Same-column reorder: persist position, no full re-render ──
+          // Count visible card elements (skip the add-placeholder)
+          const cards = Array.from(evt.to.querySelectorAll('.kanban-card'));
+          const position = cards.indexOf(card);
+          const colStatus = kanbanToJira[toCol] || toCol;
+
+          fetch('/tasks/' + taskId + '/reorder', {
+            method: 'POST',
+            body: JSON.stringify({ position: position, status: colStatus }),
+            headers: { 'Content-Type': 'application/json' }
+          })
+          .then(function(res) {
+            if (!res.ok) throw new Error('Reorder failed: ' + res.status);
+            card.classList.remove('kanban-card-updating');
+          })
+          .catch(function(err) {
+            console.error(err);
+            // Revert: move card back to old index
+            const ref = evt.from.children[evt.oldIndex] || null;
+            evt.from.insertBefore(card, ref);
+            card.classList.remove('kanban-card-updating');
+          });
+        }
+      }
+    });
+  });
+})();
+</script>
 
 

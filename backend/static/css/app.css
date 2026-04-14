@@ -647,6 +647,59 @@ tr:hover td { background: var(--surface2); }
   padding-top: 7px; margin-top: 4px;
 }
 
+/* Drag handle */
+.drag-handle {
+  position: absolute;
+  top: 6px; right: 8px;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity .12s;
+  line-height: 1;
+  user-select: none;
+}
+.kanban-card { position: relative; }
+.epic-card { position: relative; }
+.kanban-card:hover .drag-handle,
+.epic-card:hover .drag-handle { opacity: 0.5; }
+.drag-handle:hover { opacity: 1 !important; color: var(--text); }
+
+/* Drag states */
+.kanban-card-ghost {
+  opacity: 0.35;
+  background: var(--surface3) !important;
+  border: 1px dashed var(--accent) !important;
+}
+.kanban-card-dragging {
+  opacity: 0.9;
+  transform: rotate(1.5deg) scale(1.02);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  cursor: grabbing !important;
+  z-index: 999;
+}
+.kanban-card-updating {
+  opacity: 0.5;
+  pointer-events: none;
+}
+/* Epic board drag states (same visual treatment as task cards) */
+.epic-card-ghost {
+  opacity: 0.35;
+  background: var(--surface3) !important;
+  border: 1px dashed var(--accent) !important;
+}
+.epic-card-dragging {
+  opacity: 0.9;
+  transform: rotate(1.5deg) scale(1.02);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  cursor: grabbing !important;
+  z-index: 999;
+}
+.epic-card-updating {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .kanban-add-placeholder {
   text-align: center; color: var(--muted); font-size: .75rem;
   padding: 8px;
