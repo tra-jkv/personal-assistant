@@ -181,13 +181,26 @@ class GitHubService:
                     pr_data = payload.get("pull_request", {})
                     review_data = payload.get("review", {})
 
+                    pr_number = pr_data.get("number", "")
+                    repo_name = event.repo.name  # "org/repo"
+
+                    # The stripped event payload omits pr title and pr html_url.
+                    # Construct them from available fields.
+                    pr_url = pr_data.get("html_url") or (
+                        f"https://github.com/{repo_name}/pull/{pr_number}" if pr_number else ""
+                    )
+                    # Use review html_url if PR url missing; fall back to branch name for title
+                    review_url = review_data.get("html_url", "") or pr_url
+                    branch = pr_data.get("head", {}).get("ref", "")
+                    pr_title = pr_data.get("title") or branch or f"PR #{pr_number}"
+
                     reviews.append(
                         {
-                            "repo": event.repo.name,
-                            "pr_title": pr_data.get("title", ""),
-                            "pr_number": pr_data.get("number", ""),
+                            "repo": repo_name,
+                            "pr_title": pr_title,
+                            "pr_number": pr_number,
                             "state": review_data.get("state", ""),
-                            "url": pr_data.get("html_url", ""),
+                            "url": pr_url or review_url,
                             "timestamp": event.created_at,
                         }
                     )
