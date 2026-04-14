@@ -118,14 +118,17 @@ class BackgroundSync:
                 print(f"Error: {e}")
                 self._github_commits_cache = []
 
-            # GitHub PRs - fetch from all repos
+            # GitHub PRs - fetch from all repos, match by updated date so PRs
+            # opened before the window but merged/updated within it are included.
             print("  Fetching GitHub PRs...", end=" ", flush=True)
             try:
-                query = f"author:{self.github.user.login} created:{start_str}..{end_str} is:pr"
-                results = list(self.github.github.search_issues(query=query, sort="created"))
+                query = f"author:{self.github.user.login} updated:{start_str}..{end_str} is:pr"
+                results = list(self.github.github.search_issues(query=query, sort="updated"))
                 self._github_prs_cache = []
                 for pr in results:
-                    pr_date = pr.created_at
+                    # Bucket by updated_at so the PR appears on the day it was
+                    # last touched (merged, reviewed, closed), not when opened.
+                    pr_date = pr.updated_at
                     if pr_date:
                         if hasattr(pr_date, "date"):
                             d = pr_date.date()
@@ -148,40 +151,63 @@ class BackgroundSync:
                 print(f"Error: {e}")
                 self._github_prs_cache = []
 
-            # GitHub reviews (using Search API for better coverage)
+            # GitHub reviews — use Events API for recent months (accurate timestamps),
+            # fall back to Search API for older history (>90 days, approximate dates).
             print("  Fetching GitHub reviews...", end=" ", flush=True)
             try:
                 user_login = self.github.user.login
                 self._github_reviews_cache = []
 
-                # Filter by updated date server-side to avoid paginating all history
-                # GITHUB_ORGS: comma-separated list of GitHub org names to search for reviews
-                # e.g. GITHUB_ORGS=mycompany,mycompany-internal
-                github_orgs_env = os.getenv("GITHUB_ORGS", "")
-                github_orgs = [o.strip() for o in github_orgs_env.split(",") if o.strip()]
-                for org in github_orgs:
-                    query = (
-                        f"reviewed-by:{user_login} org:{org} is:pr updated:{start_str}..{end_str}"
-                    )
-                    results = self.github.github.search_issues(query, sort="updated", order="desc")
+                events_cutoff = date.today() - timedelta(days=88)  # Events API ~90-day window
 
-                    for pr in results:
-                        pr_date = pr.updated_at.date() if pr.updated_at else None
-
-                        # Extract repo name from repository_url
-                        repo_name = pr.repository_url.split("/")[-1] if pr.repository_url else ""
-                        repo_full = f"{org}/{repo_name}"
-
-                        self._github_reviews_cache.append(
-                            {
-                                "date": pr_date,
-                                "repo": repo_full,
-                                "pr_title": pr.title or "",
-                                "pr_number": pr.number,
-                                "state": "approved",
-                                "url": pr.html_url or "",
-                            }
+                if start_date >= events_cutoff:
+                    # Recent window — Events API gives exact review submission timestamps.
+                    since_dt = datetime.combine(start_date, datetime.min.time())
+                    reviews = self.github.get_reviews_since(since_dt)
+                    for r in reviews:
+                        ts = r.get("timestamp")
+                        r_date = ts.date() if ts and hasattr(ts, "date") else start_date
+                        # Only include reviews that fall within this chunk's window
+                        if start_date <= r_date <= end_date:
+                            self._github_reviews_cache.append(
+                                {
+                                    "date": r_date,
+                                    "repo": r.get("repo", ""),
+                                    "pr_title": r.get("pr_title", ""),
+                                    "pr_number": r.get("pr_number", ""),
+                                    "state": r.get("state", ""),
+                                    "url": r.get("url", ""),
+                                }
+                            )
+                else:
+                    # Historical window — Events API doesn't reach this far.
+                    # Use Search API; date is approximate (PR updated_at, not review date).
+                    # GITHUB_ORGS: comma-separated org names to search for reviews.
+                    github_orgs_env = os.getenv("GITHUB_ORGS", "")
+                    github_orgs = [o.strip() for o in github_orgs_env.split(",") if o.strip()]
+                    for org in github_orgs:
+                        query = (
+                            f"reviewed-by:{user_login} org:{org} is:pr "
+                            f"updated:{start_str}..{end_str}"
                         )
+                        results = self.github.github.search_issues(
+                            query, sort="updated", order="desc"
+                        )
+                        for pr in results:
+                            pr_date = pr.updated_at.date() if pr.updated_at else None
+                            repo_name = (
+                                pr.repository_url.split("/")[-1] if pr.repository_url else ""
+                            )
+                            self._github_reviews_cache.append(
+                                {
+                                    "date": pr_date,
+                                    "repo": f"{org}/{repo_name}",
+                                    "pr_title": pr.title or "",
+                                    "pr_number": pr.number,
+                                    "state": "approved",
+                                    "url": pr.html_url or "",
+                                }
+                            )
 
                 print(f"{len(self._github_reviews_cache)} reviews")
             except Exception as e:
@@ -320,12 +346,11 @@ class BackgroundSync:
 
     def _sync_today_via_events(self, today: date):
         """
-        Re-sync today's GitHub reviews using the Events API, which is timestamped
-        to when the review was submitted — unlike the Search API which matches by
-        PR updated_at and misses reviews on already-updated PRs.
+        Re-sync all of today's GitHub activity (commits, PRs, reviews) using
+        the Search/Events APIs. Called at the end of every run_full_sync so that
+        activity that happened after the day was first synced is captured.
 
-        Merges with existing today records: deletes only review rows for today,
-        then re-inserts from the Events API so commits/PRs/Jira are untouched.
+        Deletes and replaces only today's GitHub rows — Jira rows are untouched.
         """
         if not self.github:
             return
@@ -333,36 +358,143 @@ class BackgroundSync:
         try:
             since = datetime.combine(today, datetime.min.time())
             end = datetime.combine(today + timedelta(days=1), datetime.min.time())
+            today_str = today.strftime("%Y-%m-%d")
+            user_login = self.github.user.login
 
-            reviews = self.github.get_reviews_since(since)
-            print(f"  Events API: {len(reviews)} review(s) for {today}")
-
-            # Delete only today's review rows, preserve other activity types
+            # Delete today's GitHub rows (keep Jira assigned_issue rows)
             self.db.query(DailyActivity).filter(
                 DailyActivity.activity_date >= since,
                 DailyActivity.activity_date < end,
-                DailyActivity.activity_type == "review",
+                DailyActivity.source == "github",
             ).delete()
 
-            for review in reviews:
-                self.db.add(
-                    DailyActivity(
-                        activity_date=since,
-                        source="github",
-                        activity_type="review",
-                        external_id=str(review.get("pr_number", "")),
-                        title=review.get("pr_title", ""),
-                        url=review.get("url", ""),
-                        repository=review.get("repo", ""),
-                        status=review.get("state", ""),
-                    )
+            # ── Commits ──────────────────────────────────────────────────────
+            try:
+                commit_query = f"author:{user_login} committer-date:{today_str}..{today_str}"
+                commits = list(
+                    self.github.github.search_commits(query=commit_query, sort="committer-date")
                 )
+                print(f"  Today re-sync: {len(commits)} commit(s)")
+                for c in commits:
+                    commit_date = c.commit.committer.date
+                    d = (
+                        commit_date.date()
+                        if commit_date and hasattr(commit_date, "date")
+                        else today
+                    )
+                    if d == today:
+                        self.db.add(
+                            DailyActivity(
+                                activity_date=since,
+                                source="github",
+                                activity_type="commit",
+                                external_id=c.sha[:7],
+                                title=c.commit.message.split("\n")[0],
+                                url=c.html_url,
+                                repository=c.repository.full_name,
+                            )
+                        )
+            except Exception as e:
+                print(f"  Commit re-sync error: {e}")
+
+            # ── PRs (updated today) ───────────────────────────────────────────
+            try:
+                pr_query = f"author:{user_login} is:pr updated:{today_str}..{today_str}"
+                prs = list(self.github.github.search_issues(query=pr_query, sort="updated"))
+                print(f"  Today re-sync: {len(prs)} PR(s)")
+                for pr in prs:
+                    pr_date = (
+                        pr.created_at.date()
+                        if pr.created_at and hasattr(pr.created_at, "date")
+                        else today
+                    )
+                    self.db.add(
+                        DailyActivity(
+                            activity_date=since,
+                            source="github",
+                            activity_type="pull_request",
+                            external_id=str(pr.number),
+                            title=pr.title,
+                            url=pr.html_url,
+                            repository=pr.repository.full_name if pr.repository else "",
+                            status=pr.state,
+                        )
+                    )
+            except Exception as e:
+                print(f"  PR re-sync error: {e}")
+
+            # ── Reviews (Events API — most accurate) ──────────────────────────
+            try:
+                reviews = self.github.get_reviews_since(since)
+                print(f"  Today re-sync: {len(reviews)} review(s)")
+                for review in reviews:
+                    self.db.add(
+                        DailyActivity(
+                            activity_date=since,
+                            source="github",
+                            activity_type="review",
+                            external_id=str(review.get("pr_number", "")),
+                            title=review.get("pr_title", ""),
+                            url=review.get("url", ""),
+                            repository=review.get("repo", ""),
+                            status=review.get("state", ""),
+                        )
+                    )
+            except Exception as e:
+                print(f"  Review re-sync error: {e}")
 
             self.db.commit()
+
+            # ── Update DailySummary to match the freshly-written DailyActivity rows ──
+            # The chart reads from DailySummary; without this it shows stale counts.
+            try:
+                activities_today = (
+                    self.db.query(DailyActivity)
+                    .filter(
+                        DailyActivity.activity_date >= since,
+                        DailyActivity.activity_date < end,
+                    )
+                    .all()
+                )
+                n_commits = sum(1 for a in activities_today if a.activity_type == "commit")
+                n_prs = sum(1 for a in activities_today if a.activity_type == "pull_request")
+                n_reviews = sum(1 for a in activities_today if a.activity_type == "review")
+                n_jira = sum(1 for a in activities_today if a.activity_type == "assigned_issue")
+
+                existing = (
+                    self.db.query(DailySummary)
+                    .filter(
+                        DailySummary.summary_date >= since,
+                        DailySummary.summary_date < end,
+                    )
+                    .first()
+                )
+                if existing:
+                    existing.github_commits = n_commits
+                    existing.github_prs = n_prs
+                    existing.github_reviews = n_reviews
+                    existing.jira_assigned = n_jira
+                else:
+                    self.db.add(
+                        DailySummary(
+                            summary_date=since,
+                            github_commits=n_commits,
+                            github_prs=n_prs,
+                            github_issues=0,
+                            github_reviews=n_reviews,
+                            jira_assigned=n_jira,
+                            jira_worked=0,
+                            jira_transitions=0,
+                        )
+                    )
+                self.db.commit()
+            except Exception as e:
+                print(f"  DailySummary update error: {e}")
+
             self.set_last_synced_date(today)
 
         except Exception as e:
-            print(f"  Events API review sync error: {e}")
+            print(f"  Today re-sync error: {e}")
 
     def run_full_sync(self, start_date: date = None, end_date: date = None):
         """Run a full sync month-by-month to avoid GitHub rate limits.

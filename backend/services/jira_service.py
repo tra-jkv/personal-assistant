@@ -160,7 +160,7 @@ class JiraService:
             results = self.jira.enhanced_search_issues(jql, maxResults=50, expand="changelog")
 
             for issue in results:
-                issues.append(
+                transitions.append(
                     {
                         "key": issue.key,
                         "summary": issue.fields.summary,

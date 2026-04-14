@@ -35,8 +35,18 @@ Base.metadata.create_all(bind=engine)
 
 
 def _run_startup_sync():
-    """Run incremental sync in a background thread on startup."""
+    """Run sync in a background thread on startup.
+
+    Always calls run_full_sync — it handles the "already up to date" case
+    internally by falling through to _sync_today_via_events, so today's
+    activity is always refreshed.
+
+    If the DailyActivity table is completely empty (fresh install or wiped DB),
+    run_full_sync is called with start_date=DEFAULT_START to rebuild history.
+    """
+    from backend.models import DailyActivity
     from backend.services.background_sync import (
+        DEFAULT_START,
         BackgroundSync,
         sync_jira_epics_and_stories,
     )
@@ -44,15 +54,18 @@ def _run_startup_sync():
     db = SessionLocal()
     try:
         sync = BackgroundSync(db)
-        last_synced = sync.get_last_synced_date()
         today = date.today()
 
-        if last_synced and last_synced >= today:
-            print("[startup sync] Activity already up to date — skipping activity sync.")
+        # Fresh install: no rows at all — force rebuild from DEFAULT_START
+        has_any_activity = db.query(DailyActivity).first() is not None
+        if not has_any_activity:
+            print("[startup sync] No activity data found — running full history sync...")
+            sync.run_full_sync(start_date=DEFAULT_START, end_date=today)
         else:
             print("[startup sync] Starting activity sync...")
             sync.run_full_sync(end_date=today)
-            print("[startup sync] Activity sync done.")
+
+        print("[startup sync] Activity sync done.")
 
         print("[startup sync] Syncing Jira epics and tasks...")
         sync_jira_epics_and_stories()

@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import DailyActivity, DailySummary
 from backend.services.github_service import get_gh_cli_token
-from backend.services.sync_manager import SyncManager
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
@@ -593,9 +592,11 @@ def reports_page(
         [os.getenv("JIRA_SERVER"), os.getenv("JIRA_EMAIL"), os.getenv("JIRA_API_TOKEN")]
     )
 
-    sync_manager = SyncManager(db)
-    github_info = sync_manager.get_sync_info("github")
-    jira_info = sync_manager.get_sync_info("jira")
+    from backend.routers.daily_report import _get_sync_info
+
+    sync_info = _get_sync_info(db)
+    github_info = sync_info
+    jira_info = sync_info
 
     return templates.TemplateResponse(
         request,
